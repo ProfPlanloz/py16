@@ -1,0 +1,11 @@
+# Optional, aber sehr empfohlen - beschleunigt Bildladung,
+# Cart-IO und Cover-Rendering um den Faktor 50-200x
+numpy>=1.24
+
+# Fuer PDF-Export (cart als .pdf mit Handbuch speichern)
+pillow>=10.0
+reportlab>=4.0
+pypdf>=4.0
+
+# Fuer PDF-Cover-Vorschauen im Boot-Cart-Browser
+pymupdf>=1.23

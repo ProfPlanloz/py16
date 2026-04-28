@@ -1,0 +1,73 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "py-16"
+version = "1.0.0"
+description = "A 16-bit-era fantasy console with built-in editors and PDF carts"
+readme = "README.md"
+license = {file = "LICENSE"}
+requires-python = ">=3.9"
+authors = [
+    {name = "Prof.Planloz"},
+]
+keywords = ["fantasy-console", "pico-8", "game-engine", "pygame", "retro", "pixel-art"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Games/Entertainment",
+    "Topic :: Multimedia :: Graphics",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+# Pflicht-Dependencies (minimaler Lauffähigkeit)
+dependencies = [
+    "pygame>=2.5",
+]
+
+[project.optional-dependencies]
+# Beschleunigung (sehr empfohlen)
+fast = [
+    "numpy>=1.24",
+]
+# PDF-Export (Cart als PDF mit Handbuch speichern)
+pdf = [
+    "pillow>=10.0",
+    "reportlab>=4.0",
+    "pypdf>=4.0",
+]
+# PDF-Cover-Vorschauen im Boot-Cart
+covers = [
+    "pymupdf>=1.23",
+    "pillow>=10.0",
+]
+# Alle optionalen Features auf einmal
+all = [
+    "numpy>=1.24",
+    "pillow>=10.0",
+    "reportlab>=4.0",
+    "pypdf>=4.0",
+    "pymupdf>=1.23",
+]
+
+[project.urls]
+Homepage = "https://github.com/yourname/py-16"
+Repository = "https://github.com/yourname/py-16"
+Documentation = "https://github.com/yourname/py-16/blob/main/README.md"
+Issues = "https://github.com/yourname/py-16/issues"
+
+[project.scripts]
+py16 = "py16.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["py16*"]
+exclude = ["tests*"]
