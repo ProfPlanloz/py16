@@ -224,6 +224,54 @@ def _bios_countdown(boot_path):
         cart_runtime.process_pending_actions()
         state.bios_active = False
 
+def _derive_cart_save_path(extension):
+    """Leitet einen Save-Pfad aus dem aktuellen Cart-Kontext ab.
+    Logik:
+      - Wenn cart_code_file gesetzt ist und auf .py endet: ersetze .py durch .ext
+      - Wenn cart_code_file auf .p16/.pdf endet: ersetze die Endung
+      - Sonst: <carts_dir>/untitled.<ext>
+    Liefert immer einen absoluten Pfad."""
+    import os
+    from . import config as _cfg
+
+    src = getattr(state, "cart_code_file", None)
+    if src:
+        base, _ = os.path.splitext(src)
+        return base + extension
+    # Fallback: ins Cart-Verzeichnis
+    return os.path.join(_cfg.carts_dir(), "untitled" + extension)
+
+def _save_current_cart(also_pdf=True):
+    """Speichert den laufenden Cart als .p16 und (falls also_pdf) auch als .pdf
+    am Standort des Carts (oder in carts_dir falls neu)."""
+    from . import cart as _cart
+    p16_path = _derive_cart_save_path(".p16")
+    _cart.save_cart(p16_path)
+
+    if also_pdf:
+        pdf_path = _derive_cart_save_path(".pdf")
+        try:
+            _cart.save_cart(pdf_path)   # save_cart dispatcht intern auf PDF
+        except Exception as e:
+            print(f"PDF-Export fehlgeschlagen: {e}")
+            print("(PDF braucht: pip install reportlab pypdf pillow pymupdf)")
+
+def _load_current_cart():
+    """Laedt aus dem aktuellen Cart-Pfad. Bevorzugt .pdf wenn vorhanden,
+    sonst .p16."""
+    import os
+    from . import cart as _cart
+
+    pdf_path = _derive_cart_save_path(".pdf")
+    p16_path = _derive_cart_save_path(".p16")
+
+    if os.path.exists(pdf_path):
+        _cart.load_cart(pdf_path)
+    elif os.path.exists(p16_path):
+        _cart.load_cart(p16_path)
+    else:
+        print(f"Kein Cart zum Laden gefunden:\n  {pdf_path}\n  {p16_path}")
+
 def _draw_cart_load_error(err):
     """Sichtbarer Cart-Load-Error-Screen, Notausgang per ESC/F12/F6."""
     from .graphics import cls as _cls, text as _text, rectfill as _rfill
@@ -330,9 +378,9 @@ def run(update_func=None, draw_func=None, init_func=None):
                     ok, msg = code_editor.execute_code()
                     print(f"[F9] {msg}")
                 elif event.key == pygame.K_F5:
-                    cart.save_cart("cart.p16")
+                    _save_current_cart(also_pdf=True)
                 elif event.key == pygame.K_F8:
-                    cart.load_cart("cart.p16")
+                    _load_current_cart()
             elif event.type == pygame.KEYUP:
                 state.keys[event.key] = False
 
