@@ -1,16 +1,16 @@
 """
 py16.bios
 =========
-Minimaler BIOS-Bildschirm. Wird angezeigt wenn:
-  - py16.run() ohne explizite update/draw aufgerufen wird, ODER
-  - der laufende Cart ueber den Stack hinaus zurueckpoppt, ODER
-  - der User explizit go_to_bios() aufruft
+Minimal BIOS screen. Shown when:
+  - py16.run() is called without explicit update/draw, OR
+  - the running cart pops off the stack, OR
+  - the user explicitly calls go_to_bios()
 
-Bietet:
-  - Liste aller Carts im Cart-Verzeichnis
-  - Cart auswaehlen mit Pfeilen, Enter zum Starten
-  - F6 fuer leeren Code-Editor (neuer Cart schreiben)
-  - F12 fuer Power-Menue (Linux: poweroff/reboot)
+Provides:
+  - List of all carts in the cart directory
+  - Select a cart with arrows, Enter to start
+  - F6 to open empty code editor (write new cart)
+  - F12 for power menu (Linux: poweroff/reboot)
 """
 
 import os
@@ -23,18 +23,18 @@ from .graphics import cls, rectfill, rect, line, text
 from .input import btn, btnp
 
 # ----------------------------------------------------------------------
-# STATE-INIT
+# STATE INIT
 # ----------------------------------------------------------------------
 
 def _ensure_state():
     defaults = {
-        "bios_cursor":     0,        # Index in der Cart-Liste
-        "bios_scroll":     0,        # Scroll-Offset
-        "bios_cart_list":  None,     # cached: Liste der Cart-Pfade
+        "bios_cursor":     0,        # Index in cart list
+        "bios_scroll":     0,        # Scroll offset
+        "bios_cart_list":  None,     # cached: list of cart paths
         "bios_message":    "",
         "bios_msg_color":  7,
         "bios_msg_time":   0,
-        "bios_in_power":   False,    # Power-Menue-Modus
+        "bios_in_power":   False,    # Power menu mode
         "bios_power_idx":  0,
     }
     for k, v in defaults.items():
@@ -82,7 +82,7 @@ def bios_update():
             state.bios_cursor = max(0, min(len(state.bios_cart_list) - 1,
                                            state.bios_cursor + dx))
 
-    # Scroll-Offset anpassen
+    # Scroll offset anpassen
     if state.bios_cursor < state.bios_scroll:
         state.bios_scroll = state.bios_cursor
     if state.bios_cursor >= state.bios_scroll + VISIBLE_LINES:
@@ -94,19 +94,19 @@ def bios_update():
             path = state.bios_cart_list[state.bios_cursor]
             from . import cart_runtime
             cart_runtime.run_cart(path)
-            _set_msg(f"STARTE: {os.path.basename(path)}", 11)
+            _set_msg(f"STARTING: {os.path.basename(path)}", 11)
 
-    # R: Cart-Liste neu laden
+    # R: Cart-Liste neu load
     for k in (pygame.K_r,):
         if state.keys.get(k, False) and not state.keys_prev.get(k, False):
             _refresh_carts()
-            _set_msg("CART-LISTE AKTUALISIERT", 11)
+            _set_msg("CART LIST REFRESHED", 11)
 
-    # F6: leeren Code-Editor oeffnen
+    # F6: leeren Code-Editor open
     if state.keys.get(pygame.K_F6, False) and not state.keys_prev.get(pygame.K_F6, False):
         from . import code_editor
         code_editor._ensure_state()
-        # Editor leer anzeigen
+        # Show editor empty
         if not state.cart_code:
             state.ce_lines = ["import py16", "", "def init():", "    pass", "",
                               "def update():", "    pass", "",
@@ -117,7 +117,7 @@ def bios_update():
         state.editor_mode = "code"
         state.bios_active = False
 
-    # F12: Power-Menue
+    # F12: Power menu
     if state.keys.get(pygame.K_F12, False) and not state.keys_prev.get(pygame.K_F12, False):
         state.bios_in_power = True
         state.bios_power_idx = 0
@@ -145,11 +145,11 @@ def bios_draw():
 
     # Cart-Liste
     if not state.bios_cart_list:
-        text("KEINE CARTS GEFUNDEN", 8, 60, 8)
-        text(f"VERZEICHNIS:", 8, 80, 6)
+        text("NO CARTS FOUND", 8, 60, 8)
+        text(f"DIRECTORY:", 8, 80, 6)
         text(config.carts_dir(), 8, 88, 7, upper=False)
-        text("LEGE EIN .P16 ODER .PDF DORT AB", 8, 100, 6)
-        text("R AKTUALISIEREN", 8, 120, 6)
+        text("PUT A .P16 OR .PDF THERE", 8, 100, 6)
+        text("R RELOAD", 8, 120, 6)
     else:
         for i in range(VISIBLE_LINES):
             idx = state.bios_scroll + i
@@ -161,7 +161,7 @@ def bios_draw():
             is_pdf = name.lower().endswith(".pdf")
             ext_color = 11 if is_pdf else 12   # PDF gruen, .p16 blau
 
-            # Highlight aktive Zeile
+            # Highlight active row
             if idx == state.bios_cursor:
                 rectfill(0, y - 1, WIDTH, LINE_H + 1, 13)
                 text(">", LIST_X, y, 7)
@@ -170,7 +170,7 @@ def bios_draw():
                  LIST_X + 8, y, ext_color)
             text(name[:36], LIST_X + 30, y, 7, upper=False)
 
-    # Status-Bar
+    # Status bar
     sy = HEIGHT - 18
     rectfill(0, sy, WIDTH, 18, 13)
     if state.bios_message and (state.frame_count - state.bios_msg_time) < 180:
@@ -208,7 +208,7 @@ def _power_menu_update():
             if cmd:
                 _execute_power(cmd)
             else:
-                _set_msg(f"KEIN BEFEHL FUER {label}", 8)
+                _set_msg(f"NO COMMAND FOR {label}", 8)
                 state.bios_in_power = False
 
     # ESC verlaesst Power-Menue
@@ -221,7 +221,7 @@ def _power_menu_draw():
     bx, by, bw, bh = 60, 60, WIDTH - 120, 100
     rectfill(bx, by, bw, bh, 0)
     rect(bx, by, bw, bh, 7)
-    text("POWER MENUE", bx + 8, by + 6, 7)
+    text("POWER MENU", bx + 8, by + 6, 7)
 
     for i, (label, _) in enumerate(POWER_OPTIONS):
         y = by + 24 + i * 12
@@ -230,29 +230,29 @@ def _power_menu_draw():
             text(">", bx + 6, y, 7)
         text(label, bx + 14, y, 7)
 
-    text("ESC ABBRECHEN", bx + 8, by + bh - 10, 6)
+    text("ESC CANCEL", bx + 8, by + bh - 10, 6)
 
 def _execute_power(cmd):
-    """Fuehrt ein Shell-Kommando fuer Power-Off/Reboot aus."""
+    """Executes a shell command for power-off/reboot."""
     try:
-        # Vor dem Power-Off Pygame sauber beenden
+        # Cleanly shut down pygame before power-off
         pygame.quit()
-        # subprocess statt os.system, damit kein Shell-Injection moeglich ist
-        # (cmd kommt aus user-config, also vertrauenswuerdig, aber sauber)
+        # subprocess instead of os.system to avoid shell injection
+        # (cmd comes from user config, so trusted, but clean)
         subprocess.Popen(cmd, shell=True)
-        # Wir geben dem System einen Moment Zeit, dann beenden
+        # Give the system a moment, then exit
         import sys, time
         time.sleep(0.5)
         sys.exit(0)
     except Exception as e:
-        _set_msg(f"POWER-FEHLER: {e}", 8)
+        _set_msg(f"POWER ERROR: {e}", 8)
 
 # ----------------------------------------------------------------------
-# AKTIVIERUNG
+# ACTIVATION
 # ----------------------------------------------------------------------
 
 def go_to_bios():
-    """Aktiviert den BIOS-Modus. Wird im naechsten Frame aktiv."""
+    """Activates BIOS mode. Becomes active next frame."""
     state.bios_active = True
     state.editor_mode = None
     _refresh_carts()

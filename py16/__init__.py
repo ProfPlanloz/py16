@@ -1,14 +1,14 @@
 """
 py-16 Fantasy Console
 =====================
-Eine 2D-Engine im Stil der 16-Bit-Aera.
+A 2D engine in the style of the 16-bit era.
 
   - 256 x 224 Pixel @ 60 FPS
   - 256-Farben-Palette (frei zuweisbar)
-  - 1024 Sprites (8x8) im Sheet, optional als groessere Cels (bis 64x64)
-  - Map mit 128 x 128 Tiles, Multi-Layer-Rendering ueber Sprite-Flags
-  - 8 Sound-Kanaele mit 4 Wellenformen
-  - Eingebauter Sprite-Editor (F1) und Map-Editor (F2)
+  - 1024 sprites (8x8) in the sheet, optionally larger cels (up to 64x64)
+  - Map with 128x128 tiles, multi-layer rendering via sprite flags
+  - 8 sound channels with 4 waveforms
+  - Built-in sprite editor (F1) and map editor (F2)
   - Cart-Save/Load (F5/F8) im JSON-Format
 
 Verwendung:
@@ -17,7 +17,7 @@ Verwendung:
 
     def init():
         py16.sset(8, 0, 8)         # ein roter Pixel
-        py16.fset(1, 0, True)      # Flag 0 fuer Sprite 1
+        py16.fset(1, 0, True)      # Flag 0 for sprite 1
 
     def update():
         if py16.btn('right'):
@@ -32,7 +32,7 @@ Verwendung:
 """
 
 # ----------------------------------------------------------------------
-# Konstanten und Hauptschleife
+# constants und main loop
 # ----------------------------------------------------------------------
 from .core import (
     WIDTH, HEIGHT, SCALE, FPS,
@@ -55,7 +55,7 @@ from .graphics import (
 )
 
 # ----------------------------------------------------------------------
-# Sprites
+# sprites
 # ----------------------------------------------------------------------
 from .sprites import (
     sset, sget,
@@ -73,7 +73,7 @@ from .maps import (
 )
 
 # ----------------------------------------------------------------------
-# Eingabe
+# input
 # ----------------------------------------------------------------------
 from .input import (
     btn, btnp,
@@ -109,21 +109,21 @@ from .cart_runtime import (
 )
 
 def go_to_bios():
-    """Zurueck zum BIOS-Bildschirm. Wird im naechsten Frame aktiv."""
+    """Back to BIOS screen. Becomes active next frame."""
     from . import bios
     bios.go_to_bios()
 
-# PDF-Export-Funktion (optional - braucht reportlab+pypdf)
+# PDF export function (optional - needs reportlab+pypdf)
 def export_pdf(filename, title=None, author=None):
-    """Exportiert den aktuellen Cart als PDF mit Handbuch und eingebettetem Cart."""
+    """Exportiert den currentn Cart als PDF mit Handbuch und embeddedm Cart."""
     from . import cart_pdf
     return cart_pdf.export_pdf(filename, title=title, author=author)
 
-# PDF-Cover-Extraktion fuer Boot-Carts (optional - braucht pymupdf)
+# PDF cover extraction for boot carts (optional - needs pymupdf)
 def get_cart_cover(pdf_path, cell_w=64, cell_h=48):
-    """Extrahiert das Cover einer PDF und liefert ein 2D-Array
-    von Paletten-Indizes [row][col]. Liefert None wenn PDF kein Cover
-    hat oder pymupdf nicht installiert ist."""
+    """Extrahiert das Cover einer PDF und returns ein 2D-Array
+    von Paletten-Indizes [row][col]. Returns None wenn PDF kein Cover
+    hat oder pymupdf nicht installiert ."""
     from . import cart_covers
     return cart_covers.cover_to_palette_indices(pdf_path, cell_w, cell_h)
 
@@ -131,21 +131,21 @@ def get_cart_cover(pdf_path, cell_w=64, cell_h=48):
 # Code-Editor
 # ----------------------------------------------------------------------
 def set_code_file(path):
-    """Verbindet den Code-Editor mit einer externen .py-Datei.
-    Aufruf in init() z.B. mit __file__ - so kann der Editor die laufende
-    Datei live bearbeiten.
+    """Connects den Code-Editor mit einer externen .py-file.
+    call in init() z.B. mit __file__ - so can der Editor die laufende
+    file live bearbeiten.
 
     Akzeptiert None oder einen nicht existierenden Pfad; in dem Fall
-    bleibt der Editor an seinem aktuellen Inhalt. Das ist wichtig wenn
-    ein Cart aus einem .p16/.pdf geladen wird, wo __file__ nicht zur
-    laufenden Datei passt."""
+    bleibt der Editor an seinem currentn Inhalt. Das ist wichtig wenn
+    ein Cart aus einem .p16/.pdf geload wird, wo __file__ nicht zur
+    laufenden file passt."""
     import os
     from . import state, code_editor
     if not path:
         return
     if not os.path.exists(path):
-        # Datei existiert nicht - cart_code_file trotzdem setzen, damit
-        # ein spaeteres Save dort hin schreiben kann
+        # file existiert nicht - cart_code_file trotzdem setzen, damit
+        # ein spaeteres Save dort hin schreiben can
         state.cart_code_file = path
         return
     state.cart_code_file = path
@@ -153,8 +153,8 @@ def set_code_file(path):
     code_editor._load_external_if_present()
 
 def set_cart_code(code_text):
-    """Setzt den Cart-Code als String (programmatisch). Synct den
-    Editor-Buffer mit. Praktisch fuer Tests oder zum Bauen von Carts
+    """Sets den Cart-Code als String (programmatisch). Synct den
+    editor buffer too. Useful for tests or building carts
     direkt in Python ohne Editor-UI."""
     from . import state, code_editor
     state.cart_code = code_text
@@ -175,7 +175,7 @@ __all__ = [
     "cls", "pset", "pget",
     "rect", "rectfill", "line", "circ", "circfill",
     "text", "pal", "palt",
-    # Sprites
+    # sprites
     "sset", "sget", "spr", "load_spritesheet",
     # Maps
     "mset", "mget", "draw_map", "fset", "fget",

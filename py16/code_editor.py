@@ -1,18 +1,18 @@
 """
 py16.code_editor
 ================
-F6 Code-Editor. Bearbeitet das Code-Feld des Carts oder eine externe
-Python-Datei (`code_file`).
+F6 code editor. Edits the cart code field or an external
+Python-file (`code_file`).
 
-Tasten:
-  Pfeile           Cursor bewegen
-  Shift+Pfeile     Auswaehlen
-  Ctrl+A           Alles auswaehlen
-  Ctrl+C/X/V       Kopieren / Ausschneiden / Einfuegen
+Keys:
+  arrows           Move cursor
+  Shift+arrows     Auschoose
+  Ctrl+A           Alles auschoose
+  Ctrl+C/X/V       Copy / Cut / Paste
   Ctrl+Z/Y         Undo / Redo
   Ctrl+F           Suchen
-  Ctrl+S           Externe Datei speichern (falls code_file gesetzt)
-  Ctrl+L           Externe Datei neu laden
+  Ctrl+S           Save external file (if code_file is set)
+  Ctrl+L           Externe file neu load
   Tab / Shift+Tab  Einruecken / Ausruecken
   Home / End       Zeilenanfang / -ende
   PgUp / PgDn      Seitenweise scrollen
@@ -32,8 +32,8 @@ from .graphics import cls, rectfill, rect, line, text
 # LAYOUT
 # ----------------------------------------------------------------------
 
-LINE_H        = 6      # Zeilenhoehe in Pixel (5 Pixel Font + 1 Pixel Abstand)
-GUTTER_W      = 18     # Breite fuer Zeilennummern
+LINE_H        = 6      # Line height in pixels (5px font + 1px spacing)
+GUTTER_W      = 18     # Width for line numbers
 TOP_BAR_H     = 9
 STATUS_BAR_H  = 17     # 2 Zeilen unten (Status + Hilfe)
 MARGIN        = 2
@@ -56,7 +56,7 @@ def _visible_cols():
     return w // 4    # Font ist 3 Pixel breit + 1 Pixel Abstand
 
 # ----------------------------------------------------------------------
-# STATE-INIT
+# STATE INIT
 # ----------------------------------------------------------------------
 
 def _ensure_state():
@@ -86,7 +86,7 @@ def _ensure_state():
     }
     for key, default_val in defaults.items():
         if not hasattr(state, key):
-            # list/dict frisch fuer jeden Schluessel kopieren, damit nicht
+            # fresh list/dict copy per key, so we don't
             # versehentlich shared mutable defaults entstehen
             if isinstance(default_val, list):
                 setattr(state, key, list(default_val))
@@ -117,7 +117,7 @@ def _set_status(msg, color=7):
     state.ce_status_time = state.frame_count
 
 def _push_undo():
-    """Snapshot vor einer Aenderung speichern."""
+    """Snapshot vor einer Aenderung save."""
     snapshot = (list(state.ce_lines), state.ce_cur_row, state.ce_cur_col)
     state.ce_undo_stack.append(snapshot)
     if len(state.ce_undo_stack) > 100:
@@ -138,7 +138,7 @@ def _restore_snapshot(snapshot):
 # ----------------------------------------------------------------------
 
 def _selection_range():
-    """Liefert ((r1,c1),(r2,c2)) normalisiert, oder None."""
+    """Returns ((r1,c1),(r2,c2)) normalisiert, oder None."""
     if state.ce_sel_anchor is None:
         return None
     a_row, a_col = state.ce_sel_anchor
@@ -162,7 +162,7 @@ def _selection_text():
     return "\n".join(parts)
 
 def _delete_selection():
-    """Entfernt die Auswahl. Return True wenn etwas geloescht wurde."""
+    """Entfernt die selection. Return True wenn etwas gedeletes wurde."""
     rng = _selection_range()
     if rng is None:
         return False
@@ -178,7 +178,7 @@ def _delete_selection():
     return True
 
 def _start_or_keep_selection(shift_pressed):
-    """Wird vor Cursor-Bewegungen aufgerufen, wenn Shift gedrueckt ist."""
+    """Wird vor Cursor-Bewegungen called, wenn Shift gedrueckt ."""
     if shift_pressed:
         if state.ce_sel_anchor is None:
             state.ce_sel_anchor = (state.ce_cur_row, state.ce_cur_col)
@@ -210,7 +210,7 @@ def _clipboard_get():
 # ----------------------------------------------------------------------
 
 def _insert_text(s):
-    """Text an Cursor einfuegen (kann Newlines enthalten)."""
+    """Text an Cursor einfuegen (can Newlines enthalten)."""
     if not s:
         return
     _push_undo()
@@ -295,7 +295,7 @@ def _enter_with_indent():
     state.ce_cur_col = len(indent)
 
 def _indent_selection(outdent=False):
-    """Tab/Shift-Tab auf Selection oder aktueller Zeile."""
+    """Tab/Shift-Tab auf Selection oder currentr Zeile."""
     _push_undo()
     rng = _selection_range()
     if rng:
@@ -318,7 +318,7 @@ def _indent_selection(outdent=False):
 # ----------------------------------------------------------------------
 
 def _load_external_if_present():
-    """Laedt externe Datei wenn cart_code_file gesetzt ist."""
+    """Loads externe file wenn cart_code_file gesets ."""
     path = state.cart_code_file
     if not path or not os.path.exists(path):
         return
@@ -326,15 +326,15 @@ def _load_external_if_present():
         with open(path, "r", encoding="utf-8") as f:
             text = f.read()
         state.ce_lines = _text_to_lines(text)
-        state.cart_code = text                  # Code im Cart-State syncen
+        state.cart_code = text                  # Sync code into cart state
         state.ce_last_mtime = os.path.getmtime(path)
         state.ce_dirty = False
-        _set_status(f"GELADEN: {os.path.basename(path)}", 11)
+        _set_status(f"LOADED: {os.path.basename(path)}", 11)
     except Exception as e:
-        _set_status(f"LOAD-FEHLER: {e}", 8)
+        _set_status(f"LOAD ERROR: {e}", 8)
 
 def _check_external_modified():
-    """Prueft ob externe Datei geaendert wurde."""
+    """Checks ob externe file gechanges wurde."""
     path = state.cart_code_file
     if not path or not os.path.exists(path):
         return False
@@ -347,13 +347,13 @@ def _check_external_modified():
     return False
 
 def save_external_file():
-    """Schreibt aktuellen Code in cart_code_file."""
+    """Writes currentn Code in cart_code_file."""
     path = state.cart_code_file
     if not path:
         # Fallback: in cart_code im Speicher schreiben
         state.cart_code = _lines_to_text(state.ce_lines)
         state.ce_dirty = False
-        _set_status("IM CART GESPEICHERT", 11)
+        _set_status("IM CART SAVED", 11)
         return
     try:
         os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
@@ -361,7 +361,7 @@ def save_external_file():
             f.write(_lines_to_text(state.ce_lines))
         state.ce_last_mtime = os.path.getmtime(path)
         state.ce_dirty = False
-        _set_status(f"GESPEICHERT: {os.path.basename(path)}", 11)
+        _set_status(f"SAVED: {os.path.basename(path)}", 11)
     except Exception as e:
         _set_status(f"SAVE-FEHLER: {e}", 8)
 
@@ -371,26 +371,26 @@ def save_external_file():
 
 def execute_code():
     """
-    Kompiliert den Code, ruft init() auf, und ersetzt update/draw/init
+    Kompiliert den Code, ruft init() auf, und ersets update/draw/init
     in state. Return (ok, error_message).
     """
     code_text = _lines_to_text(state.ce_lines)
     state.cart_code = code_text
 
-    # Erst syntaktisch pruefen
+    # Erst syntaktisch check
     try:
         compiled = compile(code_text, state.cart_code_file or "<cart>", "exec")
     except SyntaxError as e:
         return False, f"SYNTAX FEHLER ZEILE {e.lineno}: {e.msg}"
 
-    # Globals fuer Cart-Code: gesamte py16-API verfuegbar machen
+    # Globals for cart code: expose entire py16 API
     import py16
     cart_globals = {
         "__name__": "__cart__",
         "__file__": state.cart_code_file or "<cart>",
         "py16": py16,
     }
-    # Auch direkte Funktionen verfuegbar machen (ohne py16.-Praefix)
+    # Auch direkte Funktionen available machen (ohne py16.-Praefix)
     for name in py16.__all__:
         cart_globals[name] = getattr(py16, name)
 
@@ -433,16 +433,16 @@ def _shift(): return state.keys.get(pygame.K_LSHIFT, False) or state.keys.get(py
 def code_editor_update():
     _ensure_state()
 
-    # Externe Datei - wenn extern geaendert, neu laden (sanft)
+    # Externe file - wenn extern gechanges, neu load (sanft)
     if _check_external_modified():
         _load_external_if_present()
 
-    # Search-Mode hat eigene Eingabe
+    # Search-Mode hat eigene input
     if state.ce_search_mode:
         _search_input()
         return
 
-    # Spezial-Tastenkombinationen mit Ctrl
+    # Spezial-keyskombinationen mit Ctrl
     if _ctrl():
         for ev in state.keys:
             if not state.keys.get(ev, False) or state.keys_prev.get(ev, False):
@@ -494,7 +494,7 @@ def code_editor_update():
                 _set_status("SUCHE: ", 7)
                 return
 
-    # Normale Cursor-Tasten und Editing
+    # Normale Cursor-keys und Editing
     for ev in list(state.keys.keys()):
         if not state.keys.get(ev, False) or state.keys_prev.get(ev, False):
             continue
@@ -566,8 +566,8 @@ def code_editor_update():
 def _key_to_char(key):
     """Konvertiert Pygame-Keycode zu druckbarem Zeichen unter Beruecksichtigung von Shift."""
     shift = _shift()
-    # Pygame liefert in event.unicode normalerweise das Zeichen, aber wir
-    # haben hier nur den Keycode. Daher manuelle Tabelle fuer ASCII.
+    # Pygame returns in event.unicode normalerweise das Zeichen, aber wir
+    # have only the keycode here. So a manual ASCII table.
     if pygame.K_a <= key <= pygame.K_z:
         ch = chr(key)
         return ch.upper() if shift else ch
@@ -592,7 +592,7 @@ def _key_to_char(key):
     return special.get(key)
 
 def _scroll_to_cursor():
-    """Scrolling so anpassen, dass Cursor sichtbar ist."""
+    """Scrolling so anpassen, dass Cursor sichtbar ."""
     vlines = _visible_lines()
     vcols = _visible_cols()
 
@@ -611,7 +611,7 @@ def _scroll_to_cursor():
 # ----------------------------------------------------------------------
 
 def _search_input():
-    """Eigene Tastenbehandlung im Suche-Modus."""
+    """Eigene keysbehandlung im Suche-Modus."""
     for ev in list(state.keys.keys()):
         if not state.keys.get(ev, False) or state.keys_prev.get(ev, False):
             continue
@@ -655,7 +655,7 @@ def _do_search():
             _scroll_to_cursor()
             _set_status(f"GEFUNDEN ZEILE {r+1}", 11)
             return
-    _set_status("NICHT GEFUNDEN", 8)
+    _set_status("NOT FOUND", 8)
 
 # ----------------------------------------------------------------------
 # DRAW
@@ -707,7 +707,7 @@ def code_editor_draw():
         # nicht zu ?-Glyphen werden.
         full_line = state.ce_lines[line_idx]
         visible = full_line[state.ce_scroll_col:state.ce_scroll_col + vcols]
-        # Tabs durch 4 Spaces ersetzen fuer Anzeige
+        # Replace tabs with 4 spaces for display
         visible = visible.replace("\t", "    ")
         text(visible, cx, y, 7, upper=False)
 
@@ -720,7 +720,7 @@ def code_editor_draw():
             cy2 = cy + cur_screen_row * LINE_H
             line(cx2, cy2 - 1, cx2, cy2 + LINE_H - 2, 7)
 
-    # Status-Bar
+    # Status bar
     sy = HEIGHT - STATUS_BAR_H
     rectfill(0, sy, WIDTH, STATUS_BAR_H, 1)
     # Position

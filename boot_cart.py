@@ -1,29 +1,28 @@
 """
-boot_cart.py - Beispiel-Boot-Cart fuer py-16
-=============================================
+boot_cart.py - example boot cart for py-16
+==========================================
 
-Ein hubescher Cart-Browser, der als Boot-Cart benutzt werden kann.
-Listet alle Carts im Cart-Verzeichnis (ausser sich selbst), zeigt
-einfache Cover-Vorschauen und startet ausgewaehlte Carts mit
-push_cart() - so kommt man mit pop_cart() (intern: F12 -> BIOS) wieder
-zurueck zum Browser.
+A nicer cart browser that can be used as a boot cart. Lists all
+carts in the cart directory (except itself), shows simple cover
+previews, and starts selected carts with push_cart() - so you can
+return to the browser with pop_cart() (or F12 -> BIOS).
 
 # @manual
 # @description
-# Boot-Cart fuer py-16. Browse durch deine Cart-Sammlung mit
-# Cover-Vorschauen.
+# Boot cart for py-16. Browse your cart collection with
+# cover previews.
 #
 # @controls
-# Pfeile      : Navigation durch die Cart-Liste
-# Enter/Space : Ausgewaehlten Cart starten
-# F12         : Zurueck ins BIOS
-# F6          : Code-Editor
+# Arrows      : Navigate the cart list
+# Enter/Space : Start selected cart
+# F12         : Back to BIOS
+# F6          : Code editor
 # @end
 
 Installation:
-  Diese Datei mit py-16 oeffnen, im Code-Editor F5 druecken,
-  als 'boot.p16' im Cart-Verzeichnis (~/.py16/carts/) speichern.
-  Beim naechsten Start laedt py-16 sie automatisch.
+  Open this file with py-16, press F5 in the code editor,
+  save as 'boot.p16' in the cart directory (~/.py16/carts/).
+  Next launch py-16 will load it automatically.
 """
 
 import os
@@ -75,7 +74,7 @@ def _refresh_carts():
         B.cursor = max(0, len(items) - 1)
 
 # ----------------------------------------------------------------------
-# COVER-VORSCHAU
+# COVER PREVIEW
 # ----------------------------------------------------------------------
 
 def _draw_cover_box(x, y, w, h, path, name, is_pdf, selected):
@@ -84,7 +83,7 @@ def _draw_cover_box(x, y, w, h, path, name, is_pdf, selected):
     py16.rectfill(x, y, w, h, bg)
     py16.rect(x, y, w, h, 7 if selected else 5)
 
-    # Cover-Bereich (oberes 2/3)
+    # Cover area (oberes 2/3)
     cover_h = h - 14
     cover_w = w - 4
     py16.rectfill(x + 2, y + 2, cover_w, cover_h, 0)
@@ -100,7 +99,7 @@ def _draw_cover_box(x, y, w, h, path, name, is_pdf, selected):
                     py16.pset(x + 2 + cx, y + 2 + cy, cover[cy][cx])
             cover_drawn = True
 
-    # Fallback wenn kein Cover verfuegbar: stilisiertes Symbol
+    # Fallback when no cover available: stylized symbol
     if not cover_drawn:
         if is_pdf:
             cx, cy = x + w // 2, y + cover_h // 2 + 2
@@ -125,7 +124,7 @@ def _draw_cover_box(x, y, w, h, path, name, is_pdf, selected):
     nx = x + (w - len(short) * 4) // 2
     py16.text(short, nx, y + h - 9, 7, upper=False)
 
-# Cover-Cache: zur Laufzeit, damit jedes Cart-Cover nur einmal pro Session
+# Cover-Cache: at runtime, damit jedes Cart-Cover nur einmal pro Session
 # aus dem PNG-Cache geholt wird
 _cover_cache = {}
 
@@ -144,7 +143,7 @@ def _get_cached_cover(path, w, h):
 # ----------------------------------------------------------------------
 
 def update():
-    # Verzeichnis alle 60 Frames neu pruefen (Hot-Plug-Support)
+    # directory alle 60 Frames neu check (Hot-Plug-Support)
     if py16.t() - B.last_dir_check > 60 or not B.cart_list:
         _refresh_carts()
         B.last_dir_check = py16.t()
@@ -153,8 +152,8 @@ def update():
     if n == 0:
         return
 
-    # Pfeil-Navigation: 2 Spalten, also left/right ist horizontal,
-    # up/down vertikal in der 2-spaltigen Liste
+    # Arrow navigation: 2 columns, so left/right is horizontal,
+    # up/down vertical in the 2-column list
     if py16.btnp('left'):
         if B.cursor % COLS > 0:
             B.cursor -= 1
@@ -188,14 +187,14 @@ def draw():
 
     n = len(B.cart_list)
     if n == 0:
-        py16.text("KEINE CARTS GEFUNDEN", 60, 80, 8)
-        py16.text("LEGE .P16/.PDF IN", 60, 100, 6)
+        py16.text("NO CARTS FOUND", 60, 80, 8)
+        py16.text("PUT .P16/.PDF INTO", 60, 100, 6)
         try:
             from py16 import config
             py16.text(config.carts_dir()[:40], 60, 108, 7, upper=False)
         except Exception:
             pass
-        py16.text("F12 ZURUECK INS BIOS", 60, 130, 6)
+        py16.text("F12 BACK TO BIOS", 60, 130, 6)
         return
 
     # Grid mit Cart-Covers
@@ -212,16 +211,19 @@ def draw():
     # Page-Indikator
     total_pages = (n + COLS * ROWS - 1) // (COLS * ROWS)
     cur_page = B.scroll // (COLS * ROWS) + 1
-    py16.text(f"SEITE {cur_page}/{total_pages}",
+    py16.text(f"PAGE {cur_page}/{total_pages}",
               py16.WIDTH - 60, py16.HEIGHT - 26, 6)
 
     # Footer
     py16.rectfill(0, py16.HEIGHT - 16, py16.WIDTH, 16, 13)
-    py16.text("PFEILE NAV  ENTER START", 4, py16.HEIGHT - 13, 6)
+    py16.text("ARROWS NAV  ENTER START", 4, py16.HEIGHT - 13, 6)
     py16.text("F12 BIOS  F6 EDITOR", 4, py16.HEIGHT - 5, 6)
 
 def init():
-    py16.set_code_file(__file__)
+    try:
+        py16.set_code_file(__file__)
+    except (NameError, Exception):
+        pass
     _refresh_carts()
 
 if __name__ == "__main__":

@@ -1,16 +1,16 @@
 """
 py16.cart_pdf
 =============
-Cart als PDF-Handbuch exportieren und aus PDF wieder laden.
+Export cart as PDF manual and load back from PDF.
 
-Ein PDF-Cart enthaelt:
-  - Seite 1: Cover (Cart-Name, Sprite-Sheet als Hintergrund, Datum)
-  - Seite 2: Beschreibung (aus @manual/@end-Kommentar im Code)
-  - Seite 3: Asset-Uebersicht (Sprite-Sheet, Map-Mini, SFX-Liste, Tracks)
-  - Seite 4+: Code-Listing im 80er-Stil (mit Zeilennummern)
-  - Anhang: Das eigentliche .p16-Cart als Datei-Attachment
+A PDF cart contains:
+  - Page 1: cover (cart name, sprite sheet as background, date)
+  - Page 2: description (from @manual/@end comment in code)
+  - Page 3: asset overview (sprite sheet, map mini, SFX list, tracks)
+  - Page 4+: code listing in 80s style (with line numbers)
+  - Attachment: The actual .p16 cart as file attachment
 
-Lesen via pypdf, Schreiben via reportlab (beide optional).
+Read via pypdf, write via reportlab (both optional).
 """
 
 import os
@@ -23,7 +23,7 @@ from . import state
 from .core import PALETTE, SHEET_SIZE, MAP_W, MAP_H
 
 # ----------------------------------------------------------------------
-# OPTIONALE ABHAENGIGKEITEN
+# OPTIONAL DEPENDENCIES
 # ----------------------------------------------------------------------
 
 try:
@@ -62,8 +62,8 @@ def _check_dependencies():
     return missing
 
 def _extract_manual(code_text):
-    """Extrahiert den Inhalt zwischen # @manual und # @end aus dem Code.
-    Liefert (description, controls, credits)."""
+    """Extracts the content between # @manual and # @end from code.
+    Returns (description, controls, credits)."""
     if not code_text:
         return None
     lines = code_text.split("\n")
@@ -80,7 +80,7 @@ def _extract_manual(code_text):
             continue
         if not in_manual:
             continue
-        # Section-Marker erkennen
+        # Detect section markers
         if s.startswith("# @controls"):
             section = "controls"
             continue
@@ -90,7 +90,7 @@ def _extract_manual(code_text):
         if s.startswith("# @description"):
             section = "description"
             continue
-        # Kommentarzeichen entfernen
+        # Strip comment markers
         if s.startswith("#"):
             text = s[1:].strip()
             sections[section].append(text)
@@ -99,8 +99,8 @@ def _extract_manual(code_text):
     return sections
 
 def _make_sprite_sheet_image(crop_to_used=False):
-    """Erzeugt ein PIL-Image vom aktuellen Sprite-Sheet.
-    Wenn crop_to_used=True: schneidet auf den belegten Bereich zu."""
+    """Creates ein PIL-Image vom currentn sprite sheet.
+    If crop_to_used=True: crops to the used area."""
     try:
         from PIL import Image
     except ImportError:
@@ -110,7 +110,7 @@ def _make_sprite_sheet_image(crop_to_used=False):
     import pygame
     if _HAS_NUMPY:
         arr = pygame.surfarray.array3d(state.sprite_sheet)
-        # surfarray ist (W, H, 3), PIL erwartet (H, W, 3)
+        # surfarray is (W, H, 3), PIL expects (H, W, 3)
         arr = arr.transpose(1, 0, 2)
         img = Image.fromarray(arr.astype("uint8"))
     else:
@@ -123,13 +123,13 @@ def _make_sprite_sheet_image(crop_to_used=False):
     if crop_to_used:
         bbox = _used_bbox(img)
         if bbox is not None:
-            # Auf naechsten 8-Pixel-Schritt aufrunden + ein bisschen Padding
+            # Auf next 8-Pixel-Schritt aufrunden + ein bisschen Padding
             l, t, r, b = bbox
             l = (l // 8) * 8
             t = (t // 8) * 8
             r = ((r + 7) // 8) * 8
             b = ((b + 7) // 8) * 8
-            # Mindestgroesse 32x32 fuer hueb"sche Anzeige
+            # Minimum size 32x32 for nice display
             if r - l < 32:
                 r = min(SHEET_SIZE, l + 32)
             if b - t < 32:
@@ -138,7 +138,7 @@ def _make_sprite_sheet_image(crop_to_used=False):
     return img
 
 def _used_bbox(img):
-    """Liefert (left, top, right, bottom) der nicht-schwarzen Pixel."""
+    """Returns (left, top, right, bottom) of non-black pixels."""
     w, h = img.size
     left, top, right, bottom = w, h, 0, 0
     found = False
@@ -157,7 +157,7 @@ def _used_bbox(img):
     return left, top, right + 1, bottom + 1
 
 def _make_map_image(scale=1):
-    """Rendert die Map als kleines Bild (jeder Tile = scale Pixel)."""
+    """Renders the map as a small image (each tile = scale pixels)."""
     try:
         from PIL import Image
     except ImportError:
@@ -165,7 +165,7 @@ def _make_map_image(scale=1):
     img = Image.new("RGB", (MAP_W * scale, MAP_H * scale), (16, 16, 32))
     if not state.map_data:
         return img
-    # Fuer jede Map-Zelle: den dominanten Farbton des Sprites verwenden
+    # For each map cell: use the dominant color of the sprite
     sprite_avg_colors = {}
     for y in range(MAP_H):
         for x in range(MAP_W):
@@ -181,7 +181,7 @@ def _make_map_image(scale=1):
     return img
 
 def _avg_sprite_color(sprite_id):
-    """Liefert eine durchschnittliche Farbe eines Sprites."""
+    """Returns an average color of a sprite"""
     import pygame
     if state.sprite_sheet is None:
         return (128, 128, 128)
@@ -192,35 +192,35 @@ def _avg_sprite_color(sprite_id):
         for x in range(8):
             r, g, b = state.sprite_sheet.get_at((sx + x, sy + y))[:3]
             if r == 0 and g == 0 and b == 0:
-                continue   # transparent ueberspringen
+                continue   # skip transparent
             r_sum += r; g_sum += g; b_sum += b; count += 1
     if count == 0:
         return (32, 32, 32)
     return (r_sum // count, g_sum // count, b_sum // count)
 
 # ----------------------------------------------------------------------
-# PDF-EXPORT
+# PDF EXPORT
 # ----------------------------------------------------------------------
 
 def export_pdf(filename, title=None, author=None):
-    """Exportiert den aktuellen Cart als PDF-Handbuch mit eingebettetem Cart."""
+    """Exports the current cart as a PDF manual with embedded cart."""
     missing = _check_dependencies()
     if missing:
-        print(f"PDF-Export braucht: {', '.join(missing)} (pip install {' '.join(missing)})")
+        print(f"PDF export needs: {', '.join(missing)} (pip install {' '.join(missing)})")
         return False
     try:
-        from PIL import Image  # fuer Pillow-Pruefung
+        from PIL import Image  # for Pillow check
     except ImportError:
-        print("PDF-Export braucht: pillow (pip install pillow)")
+        print("PDF export needs: pillow (pip install pillow)")
         return False
 
     title = title or _derive_title(filename)
     author = author or "py-16 user"
 
-    # 1) Erst das Cart als JSON in einen Buffer (das wird der Anhang)
+    # 1) First the cart as JSON into a buffer (becomes the attachment)
     cart_buf = _build_cart_json()
 
-    # 2) PDF mit reportlab schreiben
+    # 2) Write PDF with reportlab
     pdf_buf = io.BytesIO()
     c = _rl_canvas.Canvas(pdf_buf, pagesize=A4)
     page_w, page_h = A4
@@ -242,7 +242,7 @@ def export_pdf(filename, title=None, author=None):
 
     c.save()
 
-    # 3) Cart als Anhang einbetten via pypdf
+    # 3) Embed cart as attachment via pypdf
     pdf_buf.seek(0)
     reader = PdfReader(pdf_buf)
     writer = PdfWriter(clone_from=reader)
@@ -250,7 +250,7 @@ def export_pdf(filename, title=None, author=None):
 
     with open(filename, "wb") as f:
         writer.write(f)
-    print(f"PDF-Cart gespeichert: {filename}")
+    print(f"PDF-Cart saved: {filename}")
     return True
 
 def _derive_title(filename):
@@ -260,7 +260,7 @@ def _derive_title(filename):
     return base.upper().replace("_", " ").replace("-", " ") or "UNTITLED"
 
 def _build_cart_json():
-    """Erzeugt die Cart-JSON-Bytes (gleiches Format wie .p16)."""
+    """Generates the cart JSON bytes (same format as .p16)."""
     from .cart import save_cart
     tmp_path = "/tmp/_p16_pdf_attach.p16"
     save_cart(tmp_path)
@@ -276,31 +276,139 @@ def _build_cart_json():
 # COVER
 # ----------------------------------------------------------------------
 
+def _make_cover_image_for_style(style):
+    """Returns ein PIL-Bild als Cover, depending vom Stil:
+    'sheet'      = sprite sheet (cropped to used area)
+    'map'        = color map overview (scaled up)
+    'screenshot' = screenshot of the current engine screen
+    'custom'     = custom image (embedded in cart as base64)"""
+    if style == "custom":
+        return _decode_custom_image() or _make_sprite_sheet_image(crop_to_used=True)
+    if style == "screenshot":
+        return _make_screenshot_image()
+    if style == "map":
+        return _make_map_image(scale=4)
+    return _make_sprite_sheet_image(crop_to_used=True)
+
+def _make_screenshot_image():
+    """Creates a screenshot of the current state.screen as a PIL image."""
+    try:
+        from PIL import Image
+    except ImportError:
+        return None
+    if state.screen is None:
+        return None
+    import pygame
+    if _HAS_NUMPY:
+        arr = pygame.surfarray.array3d(state.screen)
+        arr = arr.transpose(1, 0, 2)
+        return Image.fromarray(arr.astype("uint8"))
+    else:
+        w, h = state.screen.get_size()
+        img = Image.new("RGB", (w, h))
+        for y in range(h):
+            for x in range(w):
+                img.putpixel((x, y), tuple(state.screen.get_at((x, y))[:3]))
+        return img
+
+# ----------------------------------------------------------------------
+# COVER-SETTINGS
+# ----------------------------------------------------------------------
+
+# Font-Mapping: interne Namen -> ReportLab-Font-Familie (regular, bold, oblique)
+FONT_FAMILIES = {
+    "helvetica": ("Helvetica", "Helvetica-Bold", "Helvetica-Oblique"),
+    "courier":   ("Courier", "Courier-Bold", "Courier-Oblique"),
+    "times":     ("Times-Roman", "Times-Bold", "Times-Italic"),
+    # "pixel" als Familie gibt es nicht in ReportLab Standard - wir mappen
+    # auf Courier-Bold (monospace) als approximation.
+    "pixel":     ("Courier-Bold", "Courier-Bold", "Courier-BoldOblique"),
+}
+
+DEFAULT_COVER = {
+    "color_bg":          1,    # Pico-Dunkelblau
+    "color_band":        14,   # Pico-Pink
+    "color_title_text":  0,    # Schwarz
+    "color_author_text": 7,    # Weiss
+    "font":              "helvetica",
+    "custom_image":      None,
+}
+
+def _cover_settings():
+    """Returns Cover-Setting-Dict, gefuellt aus cart_meta + defaults."""
+    meta = getattr(state, "cart_meta", {}) or {}
+    s = dict(DEFAULT_COVER)
+    for k in DEFAULT_COVER:
+        if k in meta and meta[k] is not None:
+            s[k] = meta[k]
+    return s
+
+def _palette_to_rgb_normalized(idx):
+    """Wandelt Paletten-Index 0-255 in (r,g,b) mit 0..1-Werten."""
+    from .core import PALETTE
+    if 0 <= idx < len(PALETTE):
+        r, g, b = PALETTE[idx]
+        return (r/255, g/255, b/255)
+    return (0, 0, 0)
+
+def _font_for(s, weight="regular"):
+    """Returns the ReportLab font name for the setting."""
+    family = s.get("font", "helvetica")
+    fonts = FONT_FAMILIES.get(family, FONT_FAMILIES["helvetica"])
+    return {"regular": fonts[0], "bold": fonts[1], "oblique": fonts[2]}[weight]
+
+def _decode_custom_image():
+    """Wandelt das base64-embedded Custom-Bild in ein PIL-Image um.
+    Returns None wenn nicht gesets oder Fehler."""
+    s = _cover_settings()
+    data_b64 = s.get("custom_image")
+    if not data_b64:
+        return None
+    try:
+        from PIL import Image
+        import base64
+        raw = base64.b64decode(data_b64)
+        return Image.open(io.BytesIO(raw)).convert("RGB")
+    except Exception as e:
+        print(f"Custom image decode failed: {e}")
+        return None
+
 def _draw_cover(c, w, h, title, author):
-    """Cover-Seite im Box-Stil."""
-    # Hintergrund: Pico-Dunkelblau
-    c.setFillColorRGB(29/255, 43/255, 83/255)
+    """Cover page in box style with configurable colors/fonts."""
+    s = _cover_settings()
+
+    # Background (from palette index)
+    bg_rgb = _palette_to_rgb_normalized(s["color_bg"])
+    c.setFillColorRGB(*bg_rgb)
     c.rect(0, 0, w, h, fill=1, stroke=0)
 
-    # Titelband oben
-    c.setFillColorRGB(255/255, 119/255, 168/255)
+    # Title band on top
+    band_rgb = _palette_to_rgb_normalized(s["color_band"])
+    c.setFillColorRGB(*band_rgb)
     c.rect(0, h - 80*mm, w, 30*mm, fill=1, stroke=0)
 
-    c.setFillColorRGB(0, 0, 0)
-    c.setFont("Helvetica-Bold", 32)
+    # Title text on the band
+    title_rgb = _palette_to_rgb_normalized(s["color_title_text"])
+    c.setFillColorRGB(*title_rgb)
+    c.setFont(_font_for(s, "bold"), 32)
     c.drawCentredString(w / 2, h - 65*mm, title)
 
-    c.setFont("Helvetica", 12)
+    c.setFont(_font_for(s, "regular"), 12)
     c.drawCentredString(w / 2, h - 75*mm, "PY-16 FANTASY CONSOLE CARTRIDGE")
 
-    # Sprite-Sheet als grosses Cover-Bild in der Mitte
-    img = _make_sprite_sheet_image(crop_to_used=True)
+    # Cover-Bild depending vom gechoosesen Stil
+    cover_style = (state.cart_meta or {}).get("cover_style", "sheet") \
+        if hasattr(state, "cart_meta") else "sheet"
+
+    img = _make_cover_image_for_style(cover_style)
     if img is not None:
-        # Schwarze (transparente) Pixel durch Cover-Hintergrundfarbe ersetzen,
-        # damit Sprite-Transparenz nicht als schwarze Loecher auftaucht
+        # Replace black (transparent) pixels with cover background color,
+        # so sprite transparency doesn't appear as black holes
         try:
             from PIL import Image
-            bg_color = (29, 43, 83)  # Pico-Dunkelblau, gleicht Cover-Bg
+            from .core import PALETTE
+            bg_idx = s["color_bg"]
+            bg_color = tuple(PALETTE[bg_idx]) if 0 <= bg_idx < len(PALETTE) else (29, 43, 83)
             img_with_bg = Image.new("RGB", img.size, bg_color)
             pixels = img.load()
             target = img_with_bg.load()
@@ -314,7 +422,7 @@ def _draw_cover(c, w, h, title, author):
             pass
 
         cw, ch = img.size
-        # Auf Pixel-Ebene upscalen mit nearest neighbor (4x)
+        # Upscale at pixel level with nearest neighbor (4x)
         upscale = 4
         big = img.resize((cw * upscale, ch * upscale), 0)
         img_buf = io.BytesIO()
@@ -322,7 +430,7 @@ def _draw_cover(c, w, h, title, author):
         img_buf.seek(0)
         from reportlab.lib.utils import ImageReader
 
-        # Maximale Display-Groesse: 130mm Breite ODER 130mm Hoehe
+        # Max display size: 130mm width OR 130mm height
         MAX_MM = 130
         aspect = cw / ch
         if aspect >= 1:
@@ -338,18 +446,19 @@ def _draw_cover(c, w, h, title, author):
                     width=disp_w * mm, height=disp_h * mm)
 
     # Footer
-    c.setFillColorRGB(255/255, 241/255, 232/255)
-    c.setFont("Helvetica-Bold", 10)
+    author_rgb = _palette_to_rgb_normalized(s["color_author_text"])
+    c.setFillColorRGB(*author_rgb)
+    c.setFont(_font_for(s, "bold"), 10)
     c.drawCentredString(w / 2, 30*mm, f"BY {author.upper()}")
-    c.setFont("Helvetica", 9)
+    c.setFont(_font_for(s, "regular"), 9)
     today = datetime.date.today().isoformat()
     c.drawCentredString(w / 2, 22*mm, today)
-    c.setFont("Helvetica-Oblique", 8)
+    c.setFont(_font_for(s, "oblique"), 8)
     c.drawCentredString(w / 2, 14*mm,
                         "OPEN THIS PDF WITH PY-16 TO PLAY")
 
 # ----------------------------------------------------------------------
-# MANUAL-SEITE (aus @manual-Kommentar)
+# MANUAL-PAGE (aus @manual-Kommentar)
 # ----------------------------------------------------------------------
 
 def _draw_manual_page(c, w, h, title, sections):
@@ -361,14 +470,14 @@ def _draw_manual_page(c, w, h, title, sections):
     c.rect(0, h - 25*mm, w, 25*mm, fill=1, stroke=0)
     c.setFillColorRGB(1, 1, 1)
     c.setFont("Helvetica-Bold", 18)
-    c.drawString(20*mm, h - 17*mm, title + " - HANDBUCH")
+    c.drawString(20*mm, h - 17*mm, title + " - MANUAL")
 
     y = h - 40*mm
     c.setFillColorRGB(0, 0, 0)
 
     if sections.get("description"):
         c.setFont("Helvetica-Bold", 13)
-        c.drawString(20*mm, y, "BESCHREIBUNG")
+        c.drawString(20*mm, y, "DESCRIPTION")
         y -= 6*mm
         c.setFont("Helvetica", 11)
         for line in sections["description"]:
@@ -380,7 +489,7 @@ def _draw_manual_page(c, w, h, title, sections):
 
     if sections.get("controls"):
         c.setFont("Helvetica-Bold", 13)
-        c.drawString(20*mm, y, "STEUERUNG")
+        c.drawString(20*mm, y, "CONTROLS")
         y -= 6*mm
         c.setFont("Courier", 10)
         for line in sections["controls"]:
@@ -407,7 +516,7 @@ def _draw_manual_page(c, w, h, title, sections):
     c.drawCentredString(w / 2, 12*mm, f"PY-16 CART - {title}")
 
 # ----------------------------------------------------------------------
-# ASSET-SEITE
+# ASSET-PAGE
 # ----------------------------------------------------------------------
 
 def _draw_assets_page(c, w, h, title):
@@ -507,7 +616,7 @@ def _draw_code_listing(c, w, h, title, code_text):
         c.drawString(20*mm, h - 17*mm,
                      f"{title} - CODE LISTING (PAGE {page_idx + 1})")
 
-        # Hellgrauer Hintergrund fuer Listing
+        # Light gray background for listing
         c.setFillColorRGB(0.97, 0.97, 0.95)
         c.rect(15*mm, 20*mm, w - 30*mm, h - 50*mm, fill=1, stroke=0)
 
@@ -538,22 +647,22 @@ def _draw_code_listing(c, w, h, title, code_text):
         page_idx += 1
 
 # ----------------------------------------------------------------------
-# PDF LADEN (Cart-Anhang extrahieren)
+# PDF LADEN (Cart-attachment extrahieren)
 # ----------------------------------------------------------------------
 
 def load_pdf(filename):
-    """Liest einen PDF-Cart und extrahiert das eingebettete .p16-Cart."""
+    """Reads einen PDF-Cart und extrahiert das embedded .p16-Cart."""
     if not _HAS_PYPDF:
-        print("PDF-Laden braucht: pypdf (pip install pypdf)")
+        print("PDF loading needs: pypdf (pip install pypdf)")
         return False
     if not os.path.exists(filename):
-        print(f"PDF '{filename}' nicht gefunden")
+        print(f"PDF '{filename}' not found")
         return False
 
     reader = PdfReader(filename)
     attachments = reader.attachments
     if not attachments:
-        print(f"PDF '{filename}' enthaelt keinen Cart-Anhang")
+        print(f"PDF '{filename}' contains no cart attachment")
         return False
 
     cart_data = None
@@ -563,7 +672,7 @@ def load_pdf(filename):
             break
 
     if cart_data is None:
-        # Fallback: ersten Anhang nehmen
+        # Fallback: ersten attachment nehmen
         first_name = next(iter(attachments))
         first_data = attachments[first_name]
         cart_data = first_data[0] if isinstance(first_data, list) else first_data
@@ -579,5 +688,5 @@ def load_pdf(filename):
     except OSError:
         pass
     if ok:
-        print(f"PDF-Cart geladen: {filename}")
+        print(f"PDF-Cart loaded: {filename}")
     return ok

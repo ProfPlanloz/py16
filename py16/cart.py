@@ -1,8 +1,8 @@
 """
 py16.cart
 =========
-Cart-Format zum Speichern und Laden eines kompletten Spielzustands
-(Sprite-Sheet, Map, Sprite-Flags) als JSON-Datei mit base64-kodiertem
+Cart format for saving and loading a complete game state
+(sprite sheet, map, sprite flags) as JSON file with base64-encoded
 Sheet.
 """
 
@@ -25,23 +25,23 @@ except ImportError:
 # ======================================================================
 
 def save_cart(filename="cart.p16"):
-    """Speichert Sheet (256x256 Indizes), Map und Flags als JSON.
-    Wenn filename auf .pdf endet, wird die PDF-Variante mit Handbuch
-    erzeugt (siehe cart_pdf.export_pdf)."""
+    """Saves sheet (256x256 indices), map and flags as JSON.
+    If filename ends in .pdf, the PDF variant with manual
+    is created (see cart_pdf.export_pdf)."""
     if filename.lower().endswith(".pdf"):
         from . import cart_pdf
         return cart_pdf.export_pdf(filename)
     return _save_cart_p16(filename)
 
 def _save_cart_p16(filename):
-    # Wenn der Code-Editor aktiv ist und sinnvollen Inhalt hat,
-    # aktuellen Editor-Stand zu cart_code syncen. Einen Editor mit nur
-    # einer leeren Zeile (initialer Default) ueberschreibt cart_code NICHT.
+    # If the code editor is active and has meaningful content,
+    # sync current editor state to cart_code. An editor with only
+    # an empty line (initial default) does NOT overwrite cart_code.
     if hasattr(state, "ce_lines") and state.ce_lines:
         from . import code_editor
         cur_text = code_editor._lines_to_text(state.ce_lines)
-        # Nur syncen wenn der Editor-Inhalt umfangreicher ist als der
-        # default-leere Zustand (mehr als 1 Zeile oder substanzieller Inhalt)
+        # Only sync if the editor content is more substantial than
+        # the default-empty state (more than 1 line or real content)
         if len(state.ce_lines) > 1 or len(cur_text.strip()) > 0:
             state.cart_code = cur_text
 
@@ -75,18 +75,19 @@ def _save_cart_p16(filename):
         "tracks":    getattr(state, "music_tracks", []),
         "code":      getattr(state, "cart_code", ""),
         "code_file": getattr(state, "cart_code_file", None),
+        "meta":      getattr(state, "cart_meta", {}) or {},
     }
     with open(filename, "w") as f:
         json.dump(cart, f)
-    print(f"Cart gespeichert: {filename}")
+    print(f"Cart saved: {filename}")
 
 # ======================================================================
 # LADEN
 # ======================================================================
 
 def load_cart(filename="cart.p16"):
-    """Laedt Cart aus JSON-Datei. Bei .pdf wird der eingebettete
-    Cart-Anhang extrahiert (siehe cart_pdf.load_pdf)."""
+    """Loads cart from JSON file. For .pdf, the embedded
+    cart attachment is extracted (see cart_pdf.load_pdf)."""
     if filename.lower().endswith(".pdf"):
         from . import cart_pdf
         return cart_pdf.load_pdf(filename)
@@ -94,7 +95,7 @@ def load_cart(filename="cart.p16"):
 
 def _load_cart_p16(filename):
     if not os.path.exists(filename):
-        print(f"Cart '{filename}' nicht gefunden")
+        print(f"Cart '{filename}' not found")
         return False
     with open(filename, "r") as f:
         cart = json.load(f)
@@ -117,14 +118,20 @@ def _load_cart_p16(filename):
     state.map_data[:]     = cart["map"]
     state.sprite_flags[:] = cart["flags"]
 
-    # SFX/Music laden, falls vorhanden (rueckwaertskompatibel mit v1)
+    # SFX/Music load, if available (rueckwaertskompatibel mit v1)
     if "sfx" in cart and hasattr(state, "sfx_patches"):
         loaded_sfx = cart["sfx"]
         for i, p in enumerate(loaded_sfx):
             if i >= len(state.sfx_patches):
                 break
-            # JSON wandelt Tuples in Listen - zurueckwandeln
+            # JSON wandelt Tuples in Listen - backwandeln
             p["notes"] = [tuple(n) for n in p["notes"]]
+            # ADSR/PWM defaults for old carts (before v1.0 ADSR update)
+            p.setdefault("attack_ms",   0)
+            p.setdefault("decay_ms",    0)
+            p.setdefault("sustain",     1.0)
+            p.setdefault("release_ms",  0)
+            p.setdefault("pulse_width", 0.5)
             state.sfx_patches[i] = p
     if "patterns" in cart and hasattr(state, "music_patterns"):
         for i, p in enumerate(cart["patterns"]):
@@ -137,12 +144,14 @@ def _load_cart_p16(filename):
                 break
             state.music_tracks[i] = list(t)
 
-    # Code-Felder laden (rueckwaertskompatibel mit v1/v2)
+    # Code-Felder load (rueckwaertskompatibel mit v1/v2)
     if "code" in cart:
         state.cart_code = cart["code"]
     if "code_file" in cart:
         state.cart_code_file = cart["code_file"]
-    # Wenn Code-Editor schon mal aktiv war: Lines-Buffer aktualisieren
+    if "meta" in cart:
+        state.cart_meta = cart["meta"] or {}
+    # Wenn Code-Editor schon mal aktiv war: Lines-Buffer refresh
     if hasattr(state, "ce_lines"):
         from . import code_editor
         state.ce_lines = code_editor._text_to_lines(state.cart_code)
@@ -150,5 +159,5 @@ def _load_cart_p16(filename):
         state.ce_cur_col = 0
         state.ce_dirty = False
 
-    print(f"Cart geladen: {filename}")
+    print(f"Cart loaded: {filename}")
     return True

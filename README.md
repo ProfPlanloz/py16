@@ -1,66 +1,58 @@
 # py-16
 
-Eine Fantasy-Konsole im Stil der 16-Bit-Aera, geschrieben in Python mit Pygame.
+A 16-bit-era fantasy console written in Python with Pygame.
 
-## Eckdaten
+## Specs
 
 | | py-16 |
 |---|---|
-| Aufloesung | 256 x 224 @ 60 FPS |
-| Palette | 256 Farben (frei zuweisbar) |
-| Sprite-Sheet | 256 x 256 (1024 Sprites a 8x8) |
-| Sprite-Groessen | 8x8 bis 64x64 (`spr(id, x, y, w, h, flip_x, flip_y)`) |
-| Map | 128 x 128 Tiles |
-| Sound | 8 Kanaele, 4 Wellenformen (Square, Triangle, Saw, Noise) |
-| Editoren | Sprite (F1), Map (F2) |
-| Cart | JSON mit base64-Sheet (~140 KB) |
+| Resolution | 256 x 224 @ 60 FPS |
+| Palette | 256 colors (freely assignable) |
+| Sprite sheet | 256 x 256 (1024 sprites of 8x8) |
+| Sprite sizes | 8x8 to 64x64 (`spr(id, x, y, w, h, flip_x, flip_y)`) |
+| Map | 128 x 128 tiles |
+| Sound | 8 channels, 4 waveforms (Square, Triangle, Saw, Noise) with ADSR + PWM |
+| Editors | Sprite (F1), Map (F2), SFX (F3), Music (F4), Code (F6), PDF (F7) |
+| Cart | JSON with base64 sheet (~140 KB) - or as PDF with manual |
 
 ## Installation
 
 ```bash
-pip install pygame numpy
+pip install pygame                                 # required
+pip install numpy pillow reportlab pypdf pymupdf   # optional, for all features
 ```
 
-(numpy ist optional, beschleunigt aber Bildladen und Cart-I/O deutlich)
-
-## Installation
+Or in one step using the optional groups:
 
 ```bash
-pip install pygame                      # Pflicht
-pip install numpy pillow reportlab pypdf pymupdf   # Optional, fuer alle Features
+pip install py-16[all]      # everything
+pip install py-16[fast]     # numpy only
+pip install py-16[pdf]      # PDF export
+pip install py-16[covers]   # PDF cover previews
 ```
 
-Oder in einem Schritt mit den Optional-Gruppen:
+## Security warning
 
-```bash
-pip install py-16[all]      # Alles
-pip install py-16[fast]     # Nur numpy
-pip install py-16[pdf]      # PDF-Export
-pip install py-16[covers]   # PDF-Cover-Vorschauen
-```
+py-16 runs cart code as plain Python - **there is no sandbox**.
+Only open carts you trust.
 
-## Sicherheitshinweis
+A malicious cart can do anything Python can: read or delete files,
+make network connections, access your microphone, webcam, address
+book. This applies to both `.p16` and `.pdf` carts. Treat carts
+like Python scripts from the internet, not like images or songs.
 
-py-16 fuehrt den Code im Cart als ganz normalen Python-Code aus -
-es gibt keine Sandbox. **Oeffne nur Carts, denen du vertraust.**
+If you load carts from the net, read the code in the code editor
+first (F6 -> F8 to load without execution -> review the code before
+pressing F9 to reload).
 
-Ein boeser Cart kann alles, was Python kann: Dateien lesen/loeschen,
-Internet-Verbindungen, dein Mikrofon, deine Webcam, dein Adressbuch.
-Das gilt fuer .p16- und .pdf-Carts gleichermassen. Behandle Carts wie
-Python-Skripte aus dem Internet, nicht wie Bilder oder Lieder.
-
-Wenn du Carts aus dem Netz lädst, lies vorher den Code im Code-Editor
-durch (F6 -> F8 zum Laden ohne Ausfuehrung -> dann kannst du den Code
-sehen, bevor du F9 zum Reload druckst).
-
-## Schnellstart
+## Quick start
 
 ```python
 import py16
 
 def init():
-    py16.sset(8, 0, 8)          # roter Pixel ins Sprite-Sheet
-    py16.fset(1, 0, True)       # Sprite 1 bekommt Flag 0
+    py16.sset(8, 0, 8)          # red pixel into sprite sheet
+    py16.fset(1, 0, True)       # sprite 1 gets flag 0
 
 def update():
     if py16.btn('right'):
@@ -74,56 +66,57 @@ def draw():
 py16.run(update, draw, init)
 ```
 
-## Modulstruktur
+## Module structure
 
 ```
 py16/
-├── __init__.py        Public-API (alles re-exportiert)
-├── state.py           Zentraler mutabler Zustand
-├── core.py            Konstanten, Palette, run(), Auto-Boot-Countdown
+├── __init__.py        Public API (everything re-exported)
+├── state.py           Central mutable state
+├── core.py            Constants, palette, run(), auto-boot countdown
 ├── graphics.py        cls, pset, rect, line, text, camera, clip, pal/palt
 ├── sprites.py         spr, sset, sget, load_spritesheet
 ├── maps.py            mset, mget, draw_map, fset, fget
 ├── input.py           btn, btnp, mouse_*
-├── audio.py           tone() + Wellenformen-Generator
-├── sfx_data.py        Datenmodelle fuer SFX/Music
-├── tracker.py         Hintergrund-Sequencer mit Effekten
+├── audio.py           tone() + waveform generator with ADSR/PWM
+├── sfx_data.py        Data models for SFX/music
+├── tracker.py         Background sequencer with effects
 ├── mathx.py           rnd, flr, mid, sin, cos, atan2, t, fps
-├── cart.py            save_cart, load_cart (.p16 und .pdf)
-├── cart_pdf.py        PDF-Export mit Handbuch
-├── cart_runtime.py    run_cart, push_cart, pop_cart (Stack)
-├── config.py          ~/.py16/config.json verwalten
-├── bios.py            BIOS-Bildschirm mit Cart-Liste, Power-Menue
-├── editors.py         Sprite- und Map-Editor (F1/F2)
-├── editors_audio.py   SFX- und Music-Editor (F3/F4)
-└── code_editor.py     Code-Editor (F6) mit Live-Reload (F9)
+├── cart.py            save_cart, load_cart (.p16 and .pdf)
+├── cart_pdf.py        PDF export with manual
+├── cart_runtime.py    run_cart, push_cart, pop_cart (stack)
+├── config.py          ~/.py16/config.json management
+├── bios.py            BIOS screen with cart list, power menu
+├── editors.py         Sprite + map editor (F1/F2)
+├── editors_audio.py   SFX + music editor (F3/F4)
+├── editor_pdf.py      PDF metadata editor (F7)
+└── code_editor.py     Code editor (F6) with live reload (F9)
 ```
 
-## BIOS und Boot-Cart
+## BIOS and boot cart
 
-py-16 startet wahlweise direkt in einen Cart oder in den BIOS-Bildschirm:
+py-16 either starts directly into a cart, or into the BIOS screen:
 
 ```bash
-# Direkt einen Cart starten
+# Start a cart directly
 python3 demo.py
 
-# Mit Boot-Cart starten (laedt automatisch ~/.py16/carts/boot.p16,
-# 3 Sekunden Countdown, ESC oder beliebige Taste = BIOS)
+# Start with auto-boot (loads ~/.py16/carts/boot.p16 automatically,
+# 3-second countdown, ESC or any key cancels into BIOS)
 python3 -c "import py16; py16.run()"
 ```
 
-Der BIOS-Bildschirm zeigt alle Carts im Cart-Verzeichnis und bietet:
-- Cart starten (Enter)
-- Code-Editor fuer neuen Cart (F6)
-- Power-Menue mit Shutdown/Reboot/Quit (F12)
+The BIOS screen shows all carts in the cart directory and offers:
+- Start cart (Enter)
+- Code editor for new cart (F6)
+- Power menu with shutdown/reboot/quit (F12)
 
-**F12** ist ueberall der Notausgang zurueck zum BIOS - egal ob ein
-Cart abgestuerzt ist oder ein Editor offen ist.
+**F12** is the universal escape hatch back to the BIOS - no matter
+whether a cart crashed or an editor is open.
 
-### Cart-Verzeichnis
+### Cart directory
 
-Default: `~/.py16/carts/`. Override per Umgebungsvariable
-`PY16_CARTS_DIR=/pfad/zu/carts`.
+Default: `~/.py16/carts/`. Override via environment variable
+`PY16_CARTS_DIR=/path/to/carts`.
 
 Configuration in `~/.py16/config.json`:
 
@@ -137,191 +130,241 @@ Configuration in `~/.py16/config.json`:
 }
 ```
 
-### Cart-Wechsel zur Laufzeit
+### Cart switching at runtime
 
 ```python
-py16.run_cart("/pfad/spiel.p16")     # Reset, alter Cart wird verworfen
-py16.push_cart("/pfad/menu.p16")     # Stack: vorigen Cart merken
-py16.pop_cart()                       # zurueck zum vorherigen Cart
-py16.go_to_bios()                     # zurueck ins BIOS
+py16.run_cart("/path/game.p16")     # reset, old cart discarded
+py16.push_cart("/path/menu.p16")    # stack: remember previous cart
+py16.pop_cart()                      # back to previous cart
+py16.go_to_bios()                    # back to BIOS
 ```
 
-Der Boot-Cart-Pattern: ein Browser-Cart nutzt `push_cart()` zum Starten
-eines Spiels; das Spiel nutzt `pop_cart()` oder F12 -> BIOS, um zurueck
-zu kommen.
+The boot-cart pattern: a browser cart uses `push_cart()` to start a
+game; the game uses `pop_cart()` (or the player presses F12 -> BIOS)
+to come back.
 
-### Beispiel-Boot-Cart
+### Example boot cart
 
-`boot_cart.py` ist ein fertiger Cart-Browser im 2x3-Grid mit Cover-Stilen.
-Speichern als `~/.py16/carts/boot.p16` und beim naechsten Start wird er
-automatisch geladen.
+`boot_cart.py` is a ready-made cart browser as a 2x3 grid with cover
+styles. Save it as `~/.py16/carts/boot.p16` and it will load
+automatically next time.
 
-### Pi-Image-Hinweise
+### Pi/SBC setup
 
-Fuer eine Einplatinen-Konsole:
-- System auf Auto-Login fuer den Pi-User konfigurieren
+For a single-board console:
+- Configure auto-login for the pi user
 - `~/.bash_profile`: `python3 -c "import py16; py16.run()"`
-- `power_off_cmd` muss ohne Passwort funktionieren -> `visudo`:
+- `power_off_cmd` must work without password -> `visudo`:
   `pi ALL=NOPASSWD: /sbin/poweroff, /sbin/reboot`
-- Vollbild aktivieren in `~/.py16/config.json`: `"fullscreen": true`
+- Activate fullscreen in `~/.py16/config.json`: `"fullscreen": true`
 
-### Vollbild
+### Fullscreen
 
 ```python
 py16.toggle_fullscreen()
 ```
 
-Oder per Tastatur **F11** zur Laufzeit. Persistent ueber Config:
+Or press **F11** at runtime. Persistent via config:
 
 ```json
 {
   "fullscreen":     true,
-  "display_scale":  "auto",        // oder fester Faktor wie 4
-  "hide_cursor":    "auto"         // im Vollbild aus
+  "display_scale":  "auto",        // or fixed factor like 4
+  "hide_cursor":    "auto"         // off in fullscreen
 }
 ```
 
-Bei `display_scale: "auto"` waehlt py-16 den groessten ganzzahligen
-Skalierungsfaktor, der auf den Bildschirm passt - ergibt scharfe Pixel
-ohne Sub-Pixel-Filtering. Das nicht abgedeckte Letterbox-Gebiet wird
-schwarz gefuellt. Maus-Koordinaten werden korrekt zurueckgerechnet.
+With `display_scale: "auto"` py-16 picks the largest integer scale
+factor that fits the screen - producing crisp pixels with no
+sub-pixel filtering. Letterbox areas are filled black. Mouse
+coordinates are correctly back-projected.
 
-### PDF-Cover-Vorschauen
+### PDF cover previews
 
-`py16.get_cart_cover(pdf_path, w, h)` liefert ein 2D-Array mit
-Paletten-Indizes als Vorschau der ersten PDF-Seite. Cache unter
-`~/.py16/cart_covers/`. Der mitgelieferte `boot_cart.py` zeigt damit
-echte Cover statt generischer Booklet-Symbole.
+`py16.get_cart_cover(pdf_path, w, h)` returns a 2D array of palette
+indices as a preview of the first PDF page. Cached under
+`~/.py16/cart_covers/`. The bundled `boot_cart.py` uses this to show
+real covers instead of generic booklet icons.
 
-Braucht `pip install pymupdf pillow`.
+Needs `pip install pymupdf pillow`.
 
-## API-Uebersicht
+## API overview
 
-### Grafik
+### Graphics
 
-| Funktion | Zweck |
+| Function | Purpose |
 |---|---|
-| `cls(c=0)` | Bildschirm fuellen |
-| `pset(x, y, c)` / `pget(x, y)` | Einzelnes Pixel |
-| `rect(x, y, w, h, c)` / `rectfill(...)` | Rechteck |
-| `line(x0, y0, x1, y1, c)` | Linie |
-| `circ(x, y, r, c)` / `circfill(...)` | Kreis |
-| `text(s, x, y, c=7)` | Text mit eingebautem 3x5-Font |
-| `camera(x, y)` | Kamera-Offset setzen |
-| `clip(x, y, w, h)` | Scissor-Rechteck |
-| `pal(c0, c1)` | Farbe c0 wird als c1 dargestellt |
-| `palt(c, transparent)` | Transparenz-Set anpassen |
+| `cls(c=0)` | Clear screen |
+| `pset(x, y, c)` / `pget(x, y)` | Single pixel |
+| `rect(x, y, w, h, c)` / `rectfill(...)` | Rectangle |
+| `line(x0, y0, x1, y1, c)` | Line |
+| `circ(x, y, r, c)` / `circfill(...)` | Circle |
+| `text(s, x, y, c=7)` | Text in built-in 3x5 font |
+| `camera(x, y)` | Set camera offset |
+| `clip(x, y, w, h)` | Scissor rect |
+| `pal(c0, c1)` | Color c0 displays as c1 |
+| `palt(c, transparent)` | Adjust transparency set |
 
-### Sprites & Map
+### Sprites & map
 
-| Funktion | Zweck |
+| Function | Purpose |
 |---|---|
-| `sset(x, y, c)` / `sget(x, y)` | Pixel im Sprite-Sheet |
-| `spr(id, x, y, w=1, h=1, flip_x=False, flip_y=False)` | Sprite zeichnen |
-| `load_spritesheet(file)` | PNG laden + auf Palette quantisieren |
-| `mset(cx, cy, id)` / `mget(cx, cy)` | Map-Zelle |
-| `draw_map(cx, cy, sx, sy, w, h, layer_flag=-1)` | Map-Bereich |
-| `fset(id, flag, value)` / `fget(id, flag)` | Sprite-Flags 0..7 |
+| `sset(x, y, c)` / `sget(x, y)` | Pixel in sprite sheet |
+| `spr(id, x, y, w=1, h=1, flip_x=False, flip_y=False)` | Draw sprite |
+| `load_spritesheet(file)` | Load PNG + quantize to palette |
+| `mset(cx, cy, id)` / `mget(cx, cy)` | Map cell |
+| `draw_map(cx, cy, sx, sy, w, h, layer_flag=-1)` | Draw map region |
+| `fset(id, flag, value)` / `fget(id, flag)` | Sprite flags 0..7 |
 
-### Eingabe
+### Input
 
-| Funktion | Zweck |
+| Function | Purpose |
 |---|---|
-| `btn(name)` | Taste gehalten? |
-| `btnp(name)` | Taste in diesem Frame neu gedrueckt? |
-| `mouse_x()`, `mouse_y()` | Mausposition (Logik-Koordinaten) |
-| `mouse_btn(idx)`, `mouse_btnp(idx)` | Maustasten 0/1/2 |
+| `btn(name)` | Held this frame? |
+| `btnp(name)` | Just pressed this frame? |
+| `mouse_x()`, `mouse_y()` | Mouse position (logic coords) |
+| `mouse_btn(idx)`, `mouse_btnp(idx)` | Mouse buttons 0/1/2 |
 
-Tasten: `up`, `down`, `left`, `right`, `z`, `x`, `a`, `s`, `space`, `enter`, `shift`
+Keys: `up`, `down`, `left`, `right`, `z`, `x`, `a`, `s`, `space`, `enter`, `shift`
 
 ### Audio
 
-| Funktion | Zweck |
+| Function | Purpose |
 |---|---|
-| `sfx(id, channel=-1)` | SFX-Patch abspielen |
-| `music(track_id, fade_ms=0)` | Music-Track im Hintergrund starten (-1 = Stop) |
-| `tone(pitch_hz, dur_ms, wave, channel=-1)` | Low-Level-Ton ohne Patch |
+| `sfx(id, channel=-1)` | Play SFX patch |
+| `music(track_id, fade_ms=0)` | Start music track in background (-1 = stop) |
+| `tone(pitch_hz, dur_ms, wave, ...)` | Low-level tone without patch |
 
-Wellenformen: `WAVE_SQUARE`, `WAVE_TRIANGLE`, `WAVE_SAW`, `WAVE_NOISE`
+Waveforms: `WAVE_SQUARE`, `WAVE_TRIANGLE`, `WAVE_SAW`, `WAVE_NOISE`
 
-**SFX-Patches (64 Slots):** Jeder Patch hat 32 Notenzellen mit Note,
-Instrument (8 Wellenformen-Varianten), Lautstaerke und Effekt
-(Slide, Vibrato, Drop, Fade-In/Out, Arpeggio fast/slow).
+**SFX patches (64 slots):** Each patch has 32 note cells with note,
+instrument (8 waveform variants), volume and effect (slide, vibrato,
+drop, fade in/out, arpeggio fast/slow). Plus per-patch ADSR envelope
+and pulse-width modulation.
 
-**Music-Patterns (64 Slots):** Jedes Pattern kombiniert 4 SFX-IDs
-fuer 4 parallele Kanaele.
+**Music patterns (64 slots):** Each pattern combines 4 SFX IDs for
+4 parallel channels.
 
-**Music-Tracks (8 Slots):** Eine Sequenz von Pattern-IDs, die nacheinander
-gespielt werden und am Ende loopen.
+**Music tracks (8 slots):** A sequence of pattern IDs that play in
+order and loop at the end.
 
-### Editoren (zur Laufzeit)
+### Audio synthesis (ADSR + PWM)
 
-| Taste | Wirkung |
+py-16 has a 16-bit audio engine with 8 channels, 4 waveforms, and
+per-SFX-patch ADSR envelope plus pulse-width modulation:
+
+```python
+py16.tone(440, duration_ms=200, wave=py16.WAVE_SQUARE,
+          attack_ms=20, decay_ms=50, sustain=0.6, release_ms=100,
+          pulse_width=0.25)
+```
+
+In the SFX editor (F3), **E** toggles envelope-edit mode. Use up/down
+arrows to switch between ATK / DEC / SUS / REL / PW, left/right
+arrows to adjust the value. A live curve shows how the sound evolves.
+
+ADSR and pulse-width are stored per SFX patch and restored when the
+cart loads. Old carts without these fields load with default values
+(flat envelope, 50% square wave).
+
+### Editors at runtime
+
+| Key | Effect |
 |---|---|
-| F1 | Sprite-Editor toggeln |
-| F2 | Map-Editor toggeln |
-| F3 | SFX-Editor toggeln |
-| F4 | Music-Editor toggeln |
-| F6 | Code-Editor toggeln |
-| F9 | Code-Reload (im Editor: Code ausfuehren) |
-| F5 | Cart speichern (`cart.p16` oder `.pdf`) |
-| F8 | Cart laden |
-| ESC | Editor verlassen / Spiel beenden |
+| F1 | Toggle sprite editor |
+| F2 | Toggle map editor |
+| F3 | Toggle SFX editor |
+| F4 | Toggle music editor |
+| F6 | Toggle code editor |
+| F7 | Toggle PDF editor (cover/title/author before PDF export) |
+| F9 | Reload cart code (in editor: run code) |
+| F11 | Toggle fullscreen |
+| F12 | Back to BIOS (universal escape) |
+| F5 | Save cart (`.p16` AND `.pdf` in parallel) |
+| F8 | Load cart (prefers `.pdf`, falls back to `.p16`) |
+| ESC | Leave editor / quit game |
 
-**Code-Editor:** Vollstaendiger Texteditor mit Cursor, Selection,
-Copy/Cut/Paste (Ctrl+C/X/V), Undo/Redo (Ctrl+Z/Y), Suche (Ctrl+F),
-Auto-Indent, Tab/Shift-Tab. Speichert mit Ctrl+S in die externe
-`.py`-Datei. Mit F9 wird der Code zur Laufzeit neu kompiliert und
-`update`/`draw` ersetzt - kein Programmneustart noetig.
+**Code editor:** Full-featured text editor with cursor, selection,
+copy/cut/paste (Ctrl+C/X/V), undo/redo (Ctrl+Z/Y), search (Ctrl+F),
+auto-indent, Tab/Shift-Tab. Ctrl+S writes to the external `.py` file.
+F9 recompiles cart code at runtime and replaces `update`/`draw` -
+no program restart needed.
 
-### PDF-Cart-Export
+**PDF editor (F7):** Live preview of the cover page with editable
+metadata. Edit title, author, cover style, four cover colors and font
+before saving as PDF. Three tabs:
 
-Carts koennen als PDF mit Handbuch und eingebettetem Cart exportiert
-werden:
+- **META** - title, author, cover style (sheet/map/screenshot/custom)
+- **STYLE** - 4 colors (background, title band, title text, author
+  text) + font (helvetica/courier/times/pixel)
+- **IMAGE** - load custom PNG/JPG to embed as cover (max 200KB)
+
+Ctrl+S saves both `.p16` and `.pdf` with the new metadata. Values
+persist in the cart (`meta` field), so they're restored next time.
+The `@manual` block from the code is shown live (read-only - edit it
+in the code editor).
+
+### Save and load
+
+**Save (F5):** saves the current cart next to the running file - if
+you start `python3 demo.py` and press F5, you get `demo.p16` and
+`demo.pdf` right next to your `demo.py`. If no source path is known
+(e.g. new cart from BIOS), the cart lands as
+`untitled.p16`/`untitled.pdf` in the configured cart directory
+(default `~/.py16/carts/`).
+
+**Load (F8):** prefers `.pdf` (if present), falls back to `.p16`.
+This makes the PDF the canonical form, always containing your latest
+state - including the manual.
+
+### PDF cart export
+
+Carts can be exported as PDF with manual and embedded cart:
 
 ```python
 py16.export_pdf("game.pdf", title="MY GAME", author="ME")
-# oder einfach:
+# or just:
 py16.save_cart("game.pdf")
 ```
 
-Das PDF enthaelt:
-- **Cover-Seite** im Box-Stil mit Sprite-Vorschau
-- **Manual-Seite** aus `# @manual ... # @end`-Kommentaren im Code
-- **Asset-Seite** mit Sprite-Sheet, Map, SFX-Liste, Tracks
-- **Code-Listing** im 80er-Stil mit Zeilennummern
-- **Cart-Anhang** (`.p16`-Datei) als PDF-Attachment
+The PDF contains:
+- **Cover page** in box style with sprite preview
+- **Manual page** from `# @manual ... # @end` comments in code
+- **Asset page** with sprite sheet, map, SFX list, tracks
+- **Code listing** in 80s style with line numbers
+- **Cart attachment** (`.p16` file) as PDF attachment
 
-Laden geht ueber `py16.load_cart("game.pdf")` - der Cart-Anhang wird
-automatisch extrahiert.
+Loading via `py16.load_cart("game.pdf")` automatically extracts the
+cart attachment.
 
-Manual-Format im Code:
+Manual format in code:
 
 ```python
 # @manual
 # @description
-# Beschreibung des Spiels.
+# Description of the game.
 #
 # @controls
-# Pfeile : Bewegen
-# Z      : Springen
+# Arrows : Move
+# Z      : Jump
 #
 # @credits
-# Autor: Du
+# Author: You
 # @end
 ```
 
-PDF-Export braucht: `pip install reportlab pypdf pillow`
+PDF export needs: `pip install reportlab pypdf pillow`
 
-**SFX-Editor:** Tracker-Raster mit 32 Notenzellen. Maus klickt Zellen an,
-Pfeiltasten navigieren, +/- aendert Werte. Klavier-Tasten (Z-X-C... fuer
-Oktave 3, Q-W-E... fuer Oktave 4) testen Tonhoehen live UND schreiben sie
-in die aktuelle Zelle. SPACE spielt den ganzen Patch ab.
+**SFX editor:** Tracker grid with 32 note cells. Click cells with the
+mouse, navigate with arrow keys, +/- changes values. Piano keys
+(Z-X-C... for octave 3, Q-W-E... for octave 4) test pitches live AND
+write them into the current cell. SPACE plays the whole patch.
 
-**Music-Editor:** Track-Sequenz oben (16 Pattern-Slots), Pattern-Editor
-darunter (4 Kanaele mit SFX-IDs). TAB wechselt Fokus, A/S waehlt Track,
-,/. waehlt Pattern. SPACE spielt Track, ENTER spielt nur Pattern.
+**Music editor:** Track sequence at top (16 pattern slots), pattern
+editor below (4 channels with SFX IDs). TAB cycles focus, A/S
+selects track, ,/. selects pattern. SPACE plays track, ENTER plays
+pattern only.
 
-## Lizenz
+## License
 
-GPLv3. Siehe LICENSE-Datei für weitere Details.
+GNU General Public License v3 (GPLv3)

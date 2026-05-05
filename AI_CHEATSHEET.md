@@ -132,7 +132,10 @@ py16.music(track_id)                       # play music track 0..7 in background
 py16.music(-1)                             # stop music
 
 # Quick raw tones (no SFX patch needed):
-py16.tone(pitch_hz, duration_ms, wave, channel=-1)
+py16.tone(pitch_hz, duration_ms, wave, channel=-1,
+          pulse_width=0.5,                    # 0.125, 0.25, 0.5, 0.75
+          attack_ms=0, decay_ms=0,            # ADSR envelope (ms)
+          sustain=1.0, release_ms=0)
 # wave = py16.WAVE_SQUARE | py16.WAVE_TRIANGLE | py16.WAVE_SAW | py16.WAVE_NOISE
 ```
 

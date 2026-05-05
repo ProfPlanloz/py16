@@ -1,15 +1,15 @@
 """
-SNAKE fuer py-16
+SNAKE for py-16
 =================
 
 # @manual
 # @description
-# Klassisches Snake. Iss Aepfel, werde laenger,
-# stosse nicht gegen Wand oder dich selbst.
+# Classic Snake. Eat apples, grow longer,
+# don't hit walls or yourself.
 #
 # @controls
-# Pfeile : Richtung aendern
-# Z      : Neustart nach Game Over
+# Arrows : Change direction
+# Z      : Restart after game over
 #
 # @credits
 # py-16 demo cart
@@ -20,7 +20,7 @@ import py16
 
 CELL = 8
 COLS = py16.WIDTH // CELL    # 32
-ROWS = (py16.HEIGHT - 16) // CELL  # 26 (16px fuer HUD reserviert)
+ROWS = (py16.HEIGHT - 16) // CELL  # 26 (16px reserved for HUD)
 
 snake = []
 direction = (1, 0)
@@ -67,13 +67,13 @@ def update():
             _new_game()
         return
 
-    # Eingabe (verhindere 180-Grad-Wende)
+    # Input (prevent 180-degree turn)
     if py16.btnp('up')    and direction != (0, 1):  next_direction = (0, -1)
     if py16.btnp('down')  and direction != (0, -1): next_direction = (0, 1)
     if py16.btnp('left')  and direction != (1, 0):  next_direction = (-1, 0)
     if py16.btnp('right') and direction != (-1, 0): next_direction = (1, 0)
 
-    # Bewegungs-Tick
+    # Movement tick
     move_timer += 1
     if move_timer < move_interval:
         return
@@ -83,13 +83,13 @@ def update():
     head_x, head_y = snake[0]
     new_head = (head_x + direction[0], head_y + direction[1])
 
-    # Wand-Kollision
+    # Wall collision
     if not (0 <= new_head[0] < COLS and 0 <= new_head[1] < ROWS):
         game_over = True
         py16.tone(80, 400, py16.WAVE_NOISE)
         return
 
-    # Selbst-Kollision
+    # Self-collision
     if new_head in snake:
         game_over = True
         py16.tone(80, 400, py16.WAVE_NOISE)
@@ -97,16 +97,16 @@ def update():
 
     snake.insert(0, new_head)
 
-    # Apfel?
+    # Apple?
     if new_head == apple:
         score += 1
         py16.tone(660, 50, py16.WAVE_TRIANGLE)
         _spawn_apple()
-        # Schneller werden
+        # Speed up
         if score % 5 == 0 and move_interval > 2:
             move_interval -= 1
     else:
-        snake.pop()   # ohne Apfel: Schwanz weg
+        snake.pop()   # without apple: tail off
 
 def draw():
     py16.cls(1)
@@ -116,14 +116,14 @@ def draw():
     py16.text(f"SCORE: {score:03d}", 4, 5, 11)
     py16.text(f"LEN: {len(snake):03d}", py16.WIDTH - 60, 5, 6)
 
-    # Spielfeld-Rahmen
+    # Playfield border
     py16.rect(0, 16, py16.WIDTH, py16.HEIGHT - 16, 5)
 
-    # Apfel
+    # Apple
     ax, ay = apple
     py16.circfill(ax * CELL + CELL // 2, 16 + ay * CELL + CELL // 2, 3, 8)
 
-    # Schlange
+    # Snake
     for i, (sx, sy) in enumerate(snake):
         col = 11 if i == 0 else 3
         py16.rectfill(sx * CELL + 1, 16 + sy * CELL + 1,
@@ -135,7 +135,7 @@ def draw():
         py16.rect(40, 80, 176, 50, 8)
         py16.text("GAME OVER", 92, 92, 8)
         py16.text(f"FINAL: {score:03d}", 92, 104, 7)
-        py16.text("Z - NEUSTART", 88, 116, 6)
+        py16.text("Z - RESTART", 88, 116, 6)
 
 if __name__ == "__main__":
     py16.run(update, draw, init)

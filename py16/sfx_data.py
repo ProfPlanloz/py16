@@ -98,6 +98,16 @@ def make_empty_sfx():
         "speed": 8,           # Default: ca. 7.5 Noten/Sek bei 60 FPS
         "loop_start": 0,
         "loop_end": 0,
+        # ADSR-Huellkurve in Millisekunden (Attack/Decay/Release)
+        # und Sustain-Level 0.0..1.0. Default: schnell-attack, sofort sustain
+        # auf voller Lautstaerke, kein Release - klingt wie alte SFX-Engine
+        "attack_ms":  0,      # 0..200ms
+        "decay_ms":   0,      # 0..500ms
+        "sustain":    1.0,    # 0.0..1.0 (Anteil von amp nach Decay)
+        "release_ms": 0,      # 0..500ms
+        # Pulse-Width fuer Square-Wave (nur fuer INST_SQUARE+INST_TILTED relevant)
+        # 0.125 = 12.5%, 0.25 = 25%, 0.5 = 50% (default), 0.75 = 75%
+        "pulse_width": 0.5,
         "notes": [
             (NOTE_EMPTY, 0, 0, FX_NONE) for _ in range(NOTES_PER_SFX)
         ],

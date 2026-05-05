@@ -2,15 +2,15 @@
 py16.tracker
 ============
 Hintergrund-Sequencer fuer SFX und Music. Wird einmal pro Frame
-ueber `tick()` aufgerufen und entscheidet, welche Note auf welchem
-Audio-Kanal gerade aktiv sein muss.
+ueber `tick()` called und entscheidet, welche Note auf welchem
+Audio-Kanal gerade aktiv sein must.
 
-Effekte werden tickweise verarbeitet (frame-genau bei 60 FPS):
-  SLIDE   : Pitch interpoliert linear von Vorgaengernote zu aktueller Note
+Effekte werden tickweise processes (frame-genau bei 60 FPS):
+  SLIDE   : Pitch interpoliert linear von Vorgaengernote zu currentr Note
   VIBRATO : Pitch sinusfoermig moduliert um Zielnote
   DROP    : Pitch faellt linear waehrend der Notendauer
-  FIN/FOT : Lautstaerke steigt/faellt linear
-  ARF/ARS : Akkord-Arpeggio (Note + Quart + Quint im Wechsel)
+  FIN/FOT : volume steigt/faellt linear
+  ARF/ARS : Akkord-Arpeggio (Note + Quart + Quint im Switch)
 """
 
 import math
@@ -25,18 +25,18 @@ from .audio import (_build_sound, WAVE_SQUARE, WAVE_TRIANGLE,
 # ----------------------------------------------------------------------
 
 def init_tracker_state():
-    """Setzt initiale Daten in state. Wird in core._init_engine() aufgerufen."""
+    """Sets initiale data in state. Wird in core._init_engine() called."""
     if not hasattr(state, "sfx_patches"):
         state.sfx_patches = [sfx_data.make_empty_sfx() for _ in range(sfx_data.NUM_SFX)]
         state.music_patterns = [sfx_data.make_empty_pattern() for _ in range(sfx_data.NUM_PATTERNS)]
         state.music_tracks = [sfx_data.make_empty_track() for _ in range(sfx_data.NUM_TRACKS)]
 
         # Aktuell laufende Tracks pro Audio-Kanal
-        # Kanaele 0..3 = Music, 4..7 = SFX und Editor-Vorschau
+        # Kanaele 0..3 = Music, 4..7 = SFX und Editor-preview
         # Jeder Eintrag: dict mit sfx_id, note_pos, frame_in_note, etc.
         state.audio_channels = [None] * 8
 
-        # Aktuelle Music-Wiedergabe
+        # Current Music-Wiedergabe
         state.music_playing = None      # dict: track, pattern_idx, ...
         # Cache fuer kurze Note-Sounds
         state.note_sound_cache = {}
@@ -46,7 +46,7 @@ def init_tracker_state():
 # ----------------------------------------------------------------------
 
 def _instrument_to_wave(inst):
-    """Mappt Instrument auf Wellenform fuer den Sound-Builder."""
+    """Mappt Instrument auf waveform fuer den Sound-Builder."""
     return {
         sfx_data.INST_SQUARE:   WAVE_SQUARE,
         sfx_data.INST_TRIANGLE: WAVE_TRIANGLE,
@@ -62,15 +62,41 @@ def _instrument_to_wave(inst):
 # NOTE ABSPIELEN (low level)
 # ----------------------------------------------------------------------
 
-def _play_note_on_channel(channel_idx, freq, instrument, volume_8, duration_ms):
-    """Spielt eine Note auf einem konkreten Mixer-Kanal."""
+def _play_note_on_channel(channel_idx, freq, instrument, volume_8, duration_ms,
+                          patch=None):
+    """Plays a note on a specific mixer channel.
+
+    patch (optional): SFX patch dict with ADSR and pulse-width settings.
+                      None = old flat-sound logic."""
     if not state.sound_enabled or freq <= 0 or volume_8 <= 0:
         return
     wave = _instrument_to_wave(instrument)
-    # Cache-Key gerundet auf 5 Hz und 5 ms (sonst explodiert der Cache)
-    key = (int(freq // 2) * 2, int(duration_ms // 5) * 5, wave)
+
+    # Patch-Settings ausziehen (oder defaults wenn keiner gegeben)
+    pw     = (patch or {}).get("pulse_width", 0.5)
+    att_ms = (patch or {}).get("attack_ms",   0)
+    dec_ms = (patch or {}).get("decay_ms",    0)
+    sus    = (patch or {}).get("sustain",     1.0)
+    rel_ms = (patch or {}).get("release_ms",  0)
+
+    # Cache key incl. sound params (rounded, else cache explodes)
+    key = (int(freq // 2) * 2,
+           int(duration_ms // 5) * 5,
+           wave,
+           round(pw, 2),
+           int(att_ms),
+           int(dec_ms),
+           round(sus, 2),
+           int(rel_ms))
     if key not in state.note_sound_cache:
-        sound = _build_sound(key[0] if key[0] > 0 else 1, key[1] if key[1] > 0 else 5, wave)
+        sound = _build_sound(
+            key[0] if key[0] > 0 else 1,
+            key[1] if key[1] > 0 else 5,
+            wave,
+            pulse_width=pw,
+            attack_ms=att_ms, decay_ms=dec_ms,
+            sustain=sus, release_ms=rel_ms,
+        )
         state.note_sound_cache[key] = sound
     sound = state.note_sound_cache[key]
     sound.set_volume(0.2 * (volume_8 / 7.0))
@@ -78,7 +104,7 @@ def _play_note_on_channel(channel_idx, freq, instrument, volume_8, duration_ms):
     ch.play(sound)
 
 # ----------------------------------------------------------------------
-# CHANNEL-RUNNER (spielt einen SFX-Patch ab)
+# CHANNEL-RUNNER (plays einen SFX-Patch ab)
 # ----------------------------------------------------------------------
 
 def _start_sfx_on_channel(channel_idx, sfx_id, is_music=False):
@@ -88,15 +114,15 @@ def _start_sfx_on_channel(channel_idx, sfx_id, is_music=False):
         return
     state.audio_channels[channel_idx] = {
         "sfx_id":         sfx_id,
-        "note_pos":       0,        # aktuelle Notenzelle 0..31
-        "frame_in_note":  0,        # Frame innerhalb der aktuellen Note
+        "note_pos":       0,        # current Notenzelle 0..31
+        "frame_in_note":  0,        # Frame innerhalb der currentn Note
         "is_music":       is_music, # ob aus Music-Loop kommend
         "current_note":   None,     # gerade gehaltene Note
         "prev_note_value": sfx_data.NOTE_EMPTY,  # fuer SLIDE-Effekt
     }
 
 def _advance_channel(channel_idx):
-    """Verarbeitet einen Frame fuer einen Audio-Kanal. Return True wenn fertig."""
+    """Processes einen Frame fuer einen Audio-Kanal. Return True wenn fertig."""
     ch = state.audio_channels[channel_idx]
     if ch is None:
         return False
@@ -104,7 +130,7 @@ def _advance_channel(channel_idx):
     sfx = state.sfx_patches[ch["sfx_id"]]
     speed = max(1, sfx["speed"])
 
-    # Wenn am Anfang einer Notenzelle: spiele Note an
+    # Wenn am Anfang einer Notenzelle: gamee Note an
     if ch["frame_in_note"] == 0:
         cell = sfx["notes"][ch["note_pos"]]
         note, inst, vol, fx = cell
@@ -113,19 +139,19 @@ def _advance_channel(channel_idx):
             # Notendauer in ms berechnen (speed * frames * (1000/60))
             dur_ms = int(speed * (1000 / 60))
             base_freq = sfx_data.note_freq(note)
-            # Effekte koennen Frequenz/Lautstaerke spaeter modifizieren,
-            # darum spielen wir bei FX einen kuerzeren "Tick" und retriggern
+            # Effekte can frequency/volume spaeter modifizieren,
+            # darum gameen wir bei FX einen kuerzeren "Tick" und retriggern
             if fx in (sfx_data.FX_VIBRATO, sfx_data.FX_DROP,
                       sfx_data.FX_SLIDE, sfx_data.FX_ARP_FAST,
                       sfx_data.FX_ARP_SLOW):
                 # Fuer modulierte Effekte: kurze Ticks pro Frame
                 pass  # wird unten in _apply_effect ausgegeben
             else:
-                # Einfache Note: einmal anspielen
+                # Einfache Note: einmal angameen
                 fade_vol = vol
                 if fx == sfx_data.FX_FADE_IN:
                     fade_vol = max(1, vol // 2)
-                _play_note_on_channel(channel_idx, base_freq, inst, fade_vol, dur_ms)
+                _play_note_on_channel(channel_idx, base_freq, inst, fade_vol, dur_ms, patch=sfx)
 
     # Effekte tickweise anwenden (bei modulierten FX)
     _apply_effect(channel_idx)
@@ -133,7 +159,7 @@ def _advance_channel(channel_idx):
     # Frame voranzaehlen
     ch["frame_in_note"] += 1
     if ch["frame_in_note"] >= speed:
-        # Naechste Notenzelle
+        # Next Notenzelle
         ch["prev_note_value"] = ch["current_note"][0] if ch["current_note"] else sfx_data.NOTE_EMPTY
         ch["frame_in_note"] = 0
         ch["note_pos"] += 1
@@ -169,7 +195,7 @@ def _apply_effect(channel_idx):
     progress = ch["frame_in_note"] / max(1, speed)   # 0..1 in der Note
     base_freq = sfx_data.note_freq(note)
 
-    # Wir spielen pro Frame einen kurzen Tick (~16ms) mit modulierter Frequenz/Vol.
+    # Wir gameen pro Frame einen kurzen Tick (~16ms) mit modulierter frequency/Vol.
     # Das ist nicht perfekt smooth, aber reicht fuer 16-Bit-Effekte.
     tick_ms = 30
     cur_freq = base_freq
@@ -187,7 +213,7 @@ def _apply_effect(channel_idx):
     elif fx == sfx_data.FX_FADE_OUT:
         cur_vol = max(0, int(vol * (1 - progress)))
     elif fx == sfx_data.FX_ARP_FAST:
-        # Akkord: Grundton, Quart, Quint im 3-Frame-Wechsel
+        # Akkord: Grundton, Quart, Quint im 3-Frame-Switch
         offset = [0, 5, 7][ch["frame_in_note"] % 3]
         cur_freq = sfx_data.note_freq(note + offset)
     elif fx == sfx_data.FX_ARP_SLOW:
@@ -198,17 +224,17 @@ def _apply_effect(channel_idx):
     if fx in (sfx_data.FX_SLIDE, sfx_data.FX_VIBRATO, sfx_data.FX_DROP,
               sfx_data.FX_ARP_FAST, sfx_data.FX_ARP_SLOW):
         if ch["frame_in_note"] % 2 == 0:
-            _play_note_on_channel(channel_idx, cur_freq, inst, cur_vol, tick_ms)
+            _play_note_on_channel(channel_idx, cur_freq, inst, cur_vol, tick_ms, patch=sfx)
     elif fx in (sfx_data.FX_FADE_IN, sfx_data.FX_FADE_OUT):
         if ch["frame_in_note"] % 4 == 0:
-            _play_note_on_channel(channel_idx, cur_freq, inst, cur_vol, tick_ms * 2)
+            _play_note_on_channel(channel_idx, cur_freq, inst, cur_vol, tick_ms * 2, patch=sfx)
 
 # ----------------------------------------------------------------------
 # OEFFENTLICHE API
 # ----------------------------------------------------------------------
 
 def sfx(sfx_id, channel=-1):
-    """Spielt einen SFX-Patch ab. Kanal -1 = Default (Kanal 4)."""
+    """Plays einen SFX-Patch ab. Kanal -1 = default (Kanal 4)."""
     if not state.sound_enabled:
         return
     if not (0 <= sfx_id < sfx_data.NUM_SFX):
@@ -220,7 +246,7 @@ def sfx(sfx_id, channel=-1):
     _start_sfx_on_channel(ch, sfx_id, is_music=False)
 
 def music(track_id, fade_ms=0):
-    """Startet einen Music-Track im Hintergrund. -1 stoppt die Musik."""
+    """Startet einen Music-Track im Hintergrund. -1 stops die Musik."""
     if not state.sound_enabled:
         return
     if track_id < 0:
@@ -252,7 +278,7 @@ def _start_pattern(pattern_id):
             state.audio_channels[ch_idx] = None
 
 def tick():
-    """Wird einmal pro Frame in der Hauptschleife aufgerufen."""
+    """Wird einmal pro Frame in der main loop called."""
     if not state.sound_enabled:
         return
 
@@ -260,7 +286,7 @@ def tick():
     for i in range(8):
         _advance_channel(i)
 
-    # Music-Pattern-Wechsel: nur die ersten 4 Kanaele zaehlen fuer Music
+    # Music-Pattern-Switch: nur die ersten 4 Kanaele zaehlen fuer Music
     if state.music_playing:
         all_done = all(state.audio_channels[i] is None for i in range(4))
         if all_done:
@@ -276,7 +302,7 @@ def tick():
                 _start_pattern(track[cur_pat_idx])
                 return
 
-            # Naechstes Pattern in der Sequenz
+            # Nexts Pattern in der Sequenz
             mp["pattern_seq"] += 1
             if mp["pattern_seq"] >= len(track):
                 mp["pattern_seq"] = 0   # Track loopt

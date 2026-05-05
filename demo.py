@@ -1,36 +1,36 @@
 """
-py-16 Demo-Spiel
+py-16 demo game
 ================
-Zeigt: 256-Farben-Palette, Sprite-Flipping, Multi-Layer-Map,
-Parallax-Hintergrund, alle 4 Sound-Wellenformen.
+Shows: 256-color palette, sprite flipping, multi-layer map,
+parallax background, all 4 sound waveforms.
 
-Tasten:
-    Pfeile          : bewegen
-    Z / X / Space   : Triangle / Saw / Noise spielen
-    F1              : Sprite-Editor
-    F2              : Map-Editor
-    F5              : Cart speichern
-    F8              : Cart laden
-    ESC             : zurueck / beenden
+Keys:
+    Arrows          : move
+    Z / X / Space   : play Triangle / Saw / Noise
+    F1              : Sprite editor
+    F2              : Map editor
+    F5              : save cart
+    F8              : load cart
+    ESC             : back / quit
 """
 
 # @manual
 # @description
-# Eine kleine Demo der py-16 Fantasy Console.
-# Du steuerst eine Figur durch eine Parallax-Welt mit Bergen
-# im Hintergrund und einer Steinkachel-Landschaft.
+# A small demo of the py-16 fantasy console.
+# Steer a character through a parallax world with mountains
+# in the background and a stone-tile landscape.
 #
 # @controls
-# Pfeile links/rechts : Bewegen
-# Z                   : Triangle-Sound
-# X                   : Saw-Sound
-# Space               : Noise-Sound
-# F1                  : Sprite-Editor
-# F6                  : Code-Editor
-# F9                  : Code neu laden
+# Arrows left/right : Move
+# Z                   : Triangle sound
+# X                   : Saw sound
+# Space               : Noise sound
+# F1                  : Sprite editor
+# F6                  : Code editor
+# F9                  : reload code
 #
 # @credits
-# Engine und Demo: py-16 user
+# Engine and demo: py-16 user
 # @end
 
 import py16
@@ -40,14 +40,14 @@ px, py = 60.0, 100.0
 pdir   = 1   # 1 = rechts, -1 = links
 
 def init():
-    # Editor mit dieser Datei verbinden, damit F6 den Live-Code zeigt.
+    # Editor mit dieser file verbinden, damit F6 den Live-Code zeigt.
     # Nur wenn __file__ existiert (also nicht aus einem Cart-Reload):
     try:
         py16.set_code_file(__file__)
     except (NameError, Exception):
         pass
 
-    # Sprite 1: Spielerfigur (Pixel 8..15, 0..7)
+    # Sprite 1: gameerfigur (Pixel 8..15, 0..7)
     body = [
         "00111100",
         "01777710",
@@ -71,7 +71,7 @@ def init():
                 col = 7
             py16.sset(16 + i, j, col)
 
-    # Sprite 3: Stein (Pixel 24..31, 0..7) - solider Vordergrund-Layer
+    # Sprite 3: Stone (pixels 24..31, 0..7) - solid foreground layer
     for j in range(8):
         for i in range(8):
             col = 5 if (i + j) % 2 == 0 else 6
