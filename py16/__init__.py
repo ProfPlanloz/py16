@@ -11,7 +11,7 @@ A 2D engine in the style of the 16-bit era.
   - Built-in sprite editor (F1) and map editor (F2)
   - Cart-Save/Load (F5/F8) im JSON-Format
 
-Verwendung:
+Usage:
 
     import py16
 
@@ -32,7 +32,7 @@ Verwendung:
 """
 
 # ----------------------------------------------------------------------
-# constants und main loop
+# constants and main loop
 # ----------------------------------------------------------------------
 from .core import (
     WIDTH, HEIGHT, SCALE, FPS,
@@ -64,12 +64,17 @@ from .sprites import (
 )
 
 # ----------------------------------------------------------------------
-# Map und Flags
+# Map and Flags
 # ----------------------------------------------------------------------
 from .maps import (
-    mset, mget,
+    mset, mget, mclear,
     draw_map,
     fset, fget,
+    NUM_LAYERS,
+)
+from .mode7 import (
+    mode7,
+    mode7_wave, mode7_earthquake, mode7_tunnel, mode7_curve,
 )
 
 # ----------------------------------------------------------------------
@@ -80,6 +85,12 @@ from .input import (
     mouse_x, mouse_y,
     mouse_btn, mouse_btnp,
 )
+# Multi-player support
+from .controller import (
+    player_connected, player_count, player_name,
+    num_connected as num_controllers,
+    MAX_PLAYERS,
+)
 
 # ----------------------------------------------------------------------
 # Audio
@@ -89,9 +100,14 @@ from .audio import (
     WAVE_SQUARE, WAVE_TRIANGLE, WAVE_SAW, WAVE_NOISE,
 )
 from .tracker import sfx, music
+from .samples import (
+    load_sample, play_sample, clear_sample,
+    set_sample_name, set_sample_base_note,
+    NUM_SAMPLES,
+)
 
 # ----------------------------------------------------------------------
-# Mathe und Engine-Helfer
+# Mathe and Engine-Helfer
 # ----------------------------------------------------------------------
 from .mathx import (
     rnd, flr, ceil, abs_, mid,
@@ -115,15 +131,15 @@ def go_to_bios():
 
 # PDF export function (optional - needs reportlab+pypdf)
 def export_pdf(filename, title=None, author=None):
-    """Exportiert den currentn Cart als PDF mit Handbuch und embeddedm Cart."""
+    """Exports the current cart as a PDF with manual and embedded cart."""
     from . import cart_pdf
     return cart_pdf.export_pdf(filename, title=title, author=author)
 
 # PDF cover extraction for boot carts (optional - needs pymupdf)
 def get_cart_cover(pdf_path, cell_w=64, cell_h=48):
-    """Extrahiert das Cover einer PDF und returns ein 2D-Array
-    von Paletten-Indizes [row][col]. Returns None wenn PDF kein Cover
-    hat oder pymupdf nicht installiert ."""
+    """Extracts the cover of a PDF and returns a 2D array
+    von Paletten-Indizes [row][col]. Returns None if PDF kein Cover
+    hat or pymupdf not installiert ."""
     from . import cart_covers
     return cart_covers.cover_to_palette_indices(pdf_path, cell_w, cell_h)
 
@@ -131,21 +147,21 @@ def get_cart_cover(pdf_path, cell_w=64, cell_h=48):
 # Code-Editor
 # ----------------------------------------------------------------------
 def set_code_file(path):
-    """Connects den Code-Editor mit einer externen .py-file.
-    call in init() z.B. mit __file__ - so can der Editor die laufende
+    """Connects den Code-Editor with einer externen .py-file.
+    call in init() z.B. with __file__ - so can der Editor die laufende
     file live bearbeiten.
 
-    Akzeptiert None oder einen nicht existierenden Pfad; in dem Fall
-    bleibt der Editor an seinem currentn Inhalt. Das ist wichtig wenn
-    ein Cart aus einem .p16/.pdf geload wird, wo __file__ nicht zur
+    Akzeptiert None or einen not existierenden Pfad; in dem Fall
+    the editor keeps its current content. This matters when
+    a cart is loaded from .p16/.pdf, where __file__ doesn't match
     laufenden file passt."""
     import os
     from . import state, code_editor
     if not path:
         return
     if not os.path.exists(path):
-        # file existiert nicht - cart_code_file trotzdem setzen, damit
-        # ein spaeteres Save dort hin schreiben can
+        # file existiert not - cart_code_file despitedem setzen, damit
+        # ein lateres Save dort hin schreiben can
         state.cart_code_file = path
         return
     state.cart_code_file = path
@@ -155,7 +171,7 @@ def set_code_file(path):
 def set_cart_code(code_text):
     """Sets den Cart-Code als String (programmatisch). Synct den
     editor buffer too. Useful for tests or building carts
-    direkt in Python ohne Editor-UI."""
+    directly in Python without editor UI."""
     from . import state, code_editor
     state.cart_code = code_text
     code_editor._ensure_state()

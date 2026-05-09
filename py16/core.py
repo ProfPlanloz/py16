@@ -57,7 +57,7 @@ def _make_default_palette():
 PALETTE = _make_default_palette()
 
 def color_rgb(idx):
-    """Returns RGB ueber den currentn Remap."""
+    """Returns RGB ueber den current Remap."""
     return PALETTE[state.pal_remap[idx & 0xFF]]
 
 # ======================================================================
@@ -71,7 +71,7 @@ def _init_engine():
         pygame.mixer.set_num_channels(8)
         state.sound_enabled = True
     except Exception as e:
-        print(f"WARNUNG: Audio konnte nicht initialisiert werden: {e}")
+        print(f"WARNING: audio could not be initialized: {e}")
 
     state.screen = pygame.Surface((WIDTH, HEIGHT))
     state.sprite_sheet = pygame.Surface((SHEET_SIZE, SHEET_SIZE))
@@ -79,11 +79,23 @@ def _init_engine():
     state.sprite_sheet.set_colorkey(PALETTE[0])
 
     state.map_data     = [[0] * MAP_W for _ in range(MAP_H)]
+    # Layers 1..3 (layer 0 = state.map_data, kept separately for back-compat)
+    state.map_layers   = [
+        [[0] * MAP_W for _ in range(MAP_H)] for _ in range(3)
+    ]
     state.sprite_flags = [0] * 1024
 
     # Initialize tracker data
     from . import tracker
     tracker.init_tracker_state()
+
+    # Initialize sample slots
+    from . import samples
+    samples.init_state()
+
+    # Initialize gamepad / joystick subsystem
+    from . import controller as _controller
+    _controller.init()
 
     # Set display mode from config
     _apply_display_mode()
@@ -257,8 +269,8 @@ def _save_current_cart(also_pdf=True):
             print("(PDF needs: pip install reportlab pypdf pillow pymupdf)")
 
 def _load_current_cart():
-    """Loads from the current cart path. Bevorzugt .pdf wenn vorhanden,
-    sonst .p16."""
+    """Loads from the current cart path. Prefers .pdf if available,
+    else .p16."""
     import os
     from . import cart as _cart
 
@@ -339,9 +351,24 @@ def run(update_func=None, draw_func=None, init_func=None):
         state.keys_prev = state.keys.copy()
         state.mouse_btn_prev = list(state.mouse_btn)
 
+        # Poll connected gamepads / joysticks
+        from . import controller as _controller
+        _controller.update()
+
+        # Gamepad: Start+Select (enter+space) = F12 emergency BIOS exit.
+        # Important on Pi-console setups where there's no F12 key.
+        if (_controller.is_held('enter') and _controller.is_held('space')
+                and not (
+                    'enter' in state.gamepad_btn_state_prev
+                    and 'space' in state.gamepad_btn_state_prev
+                )):
+            bios.go_to_bios()
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+            elif event.type in (pygame.JOYDEVICEADDED, pygame.JOYDEVICEREMOVED):
+                _controller.handle_event(event)
             elif event.type == pygame.KEYDOWN:
                 state.keys[event.key] = True
                 if event.key == pygame.K_ESCAPE:
@@ -369,6 +396,9 @@ def run(update_func=None, draw_func=None, init_func=None):
                 elif event.key == pygame.K_F7:
                     from . import editor_pdf
                     editor_pdf.toggle()
+                elif event.key == pygame.K_F10:
+                    from . import editor_samples
+                    editor_samples.toggle()
                 elif event.key == pygame.K_F11:
                     toggle_fullscreen()
                 elif event.key == pygame.K_F12:
@@ -384,6 +414,10 @@ def run(update_func=None, draw_func=None, init_func=None):
                     _save_current_cart(also_pdf=True)
                 elif event.key == pygame.K_F8:
                     _load_current_cart()
+                elif event.key == pygame.K_r and (event.mod & pygame.KMOD_CTRL):
+                    # Ctrl+R: toggle screen recording (works in any mode)
+                    from . import recording
+                    recording.toggle()
             elif event.type == pygame.KEYUP:
                 state.keys[event.key] = False
 
@@ -438,13 +472,17 @@ def run(update_func=None, draw_func=None, init_func=None):
             from . import editor_pdf
             editor_pdf.pdf_editor_update()
             editor_pdf.pdf_editor_draw()
+        elif state.editor_mode == "samples":
+            from . import editor_samples
+            editor_samples.sample_editor_update()
+            editor_samples.sample_editor_draw()
         else:
-            # Wenn Cart-Code per F9 geload wurde, dessen Funktionen verwenden;
+            # If cart code was loaded via F9, use its functions;
             # otherwise original functions from run()'s caller
             cur_update = getattr(state, "cart_update_fn", None) or update_func
             cur_draw   = getattr(state, "cart_draw_fn", None)   or draw_func
             if cur_update is None or cur_draw is None:
-                # Kein Cart loaded, kein BIOS aktiv -> ins BIOS
+                # Kein Cart loaded, kein BIOS active -> ins BIOS
                 state.bios_active = True
                 continue
             try:
@@ -468,7 +506,13 @@ def run(update_func=None, draw_func=None, init_func=None):
         from . import cart_runtime
         cart_runtime.process_pending_actions()
 
-        # Skaliertes Bild aufs Display blit - mit Letterbox bei fullscreen
+        # Screen recording: capture BEFORE drawing the REC indicator,
+        # so the indicator doesn't get baked into the GIF.
+        from . import recording
+        recording.maybe_capture_frame()
+        recording.draw_indicator()
+
+        # Skaliertes Bild aufs Display blit - with Letterbox bei fullscreen
         scale = getattr(state, "display_scale", SCALE)
         scaled = pygame.transform.scale(state.screen,
                                         (WIDTH * scale, HEIGHT * scale))

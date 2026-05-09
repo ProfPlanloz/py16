@@ -77,7 +77,7 @@ py16.palt(c, transparent=True)             # mark color as transparent
 Indices 16-31 are 16 grayscales. 32-247 are a 6×6×6 RGB cube. The full
 palette is `py16.PALETTE` (list of (r,g,b) tuples).
 
-## Sprites (1024 slots, each 8x8 pixels)
+## sprites (1024 slots, each 8x8 pixels)
 
 ```python
 py16.sset(x, y, c)                         # set pixel in sprite sheet
@@ -88,16 +88,41 @@ py16.spr(id, x, y, w=1, h=1, flip_x=False, flip_y=False)
 py16.load_spritesheet("file.png")          # quantize image into sheet
 ```
 
-## Map (128x128 tiles, each tile is a sprite ID)
+## Map (128x128 tiles, each tile is a sprite ID, up to 4 layers)
 
 ```python
-py16.mset(cx, cy, sprite_id)               # set tile at cell (cx,cy)
-py16.mget(cx, cy)                          # get tile id (0 = empty)
-py16.draw_map(cx, cy, sx, sy, w, h, layer_flag=-1)
-                                           # draw map region cx,cy of size w*h
-                                           # at screen pos sx,sy
-                                           # layer_flag: only draw sprites
-                                           # whose flag is set (0..7)
+# Layer parameter is optional, default 0 (back-compat with single-layer carts)
+py16.mset(cx, cy, sprite_id, layer=0)      # set tile on layer 0..3
+py16.mget(cx, cy, layer=0)                 # get tile id (0 = empty)
+py16.mclear(layer=0)                       # wipe entire layer
+py16.draw_map(cx, cy, sx, sy, w, h,
+              layer_flag=-1, layer=0)      # draw region from a layer
+                                           # layer_flag: only sprites with
+                                           # the given flag bit set (0..7)
+
+# 4 layers like SNES BG1-BG4. Render order is up to you:
+#   draw_map(layer=0)       <- back: distant mountains, sky parallax
+#   draw_map(layer=1)       <- mid:  clouds, mid-range parallax
+#   spr(...) for entities
+#   draw_map(layer=2)       <- gameplay tiles (terrain, blocks)
+#   draw_map(layer=3)       <- foreground: vegetation, fog, UI overlays
+
+# Mode 7 perspective ground plane (Mario Kart / F-Zero style):
+py16.mode7(cam_x, cam_y, angle,
+           horizon_y=64,                   # screen Y of horizon
+           cam_height=32, focal_length=64, # camera distortion controls
+           sky_color=None,                 # palette idx, fills above horizon
+           scanline_angles=None,           # per-row angle offsets (list/array)
+           scanline_offsets_x=None,        # per-row X offsets
+           scanline_offsets_y=None,        # per-row Y offsets
+           layer=0)                        # which map layer to project
+
+# Helpers that produce per-scanline arrays for common effects:
+n_rows = py16.HEIGHT - horizon_y
+py16.mode7_wave(n_rows, time, amplitude, frequency, speed)  # heat / water shimmer
+py16.mode7_earthquake(n_rows, time, amplitude)              # screen shake
+py16.mode7_tunnel(n_rows, twist)                            # wormhole / magic effect
+py16.mode7_curve(n_rows, time, curvature, period)           # winding road
 ```
 
 ## Sprite flags (8 bit-flags per sprite, 0-7)
@@ -114,7 +139,8 @@ Common pattern: flag 0 = solid (collide), flag 1 = enemy, flag 2 = item.
 
 ```python
 py16.btn('left' | 'right' | 'up' | 'down' | 'z' | 'x' |
-         'a' | 's' | 'space' | 'enter' | 'shift')
+         'a' | 's' | 'w' | 'd' | 'q' | 'e' |
+         'space' | 'enter' | 'shift')
                                            # held this frame?
 py16.btnp(...)                             # just pressed this frame?
 py16.mouse_x()                             # 0..WIDTH-1
@@ -122,6 +148,24 @@ py16.mouse_y()                             # 0..HEIGHT-1
 py16.mouse_btn(0|1|2)                      # 0=left, 1=middle, 2=right
 py16.mouse_btnp(0|1|2)                     # just clicked?
 ```
+
+**Multi-player:** btn/btnp accept an optional `player=N` argument:
+```python
+py16.btn('left', player=1)                 # only P1's gamepad (or keyboard
+                                           # fallback if no gamepads)
+py16.btn('left', player=2)                 # only P2's gamepad
+py16.btn('left', player=0)                 # any source (default, back-compat)
+
+py16.player_count()                        # how many players have a controller
+py16.player_connected(N)                   # is player slot N filled? (1..4)
+py16.player_name(N)                        # name of P_N's controller, or None
+py16.MAX_PLAYERS                           # 4
+```
+
+**Gamepad note:** USB gamepads automatically map to the same logical
+buttons. D-Pad / left analog stick → directions, A/B/X/Y face buttons →
+z/x/a/s, Start → enter, Back → space, LB → shift. So a cart written
+for keyboard works on a gamepad without any extra code.
 
 ## Sound
 
@@ -137,6 +181,12 @@ py16.tone(pitch_hz, duration_ms, wave, channel=-1,
           attack_ms=0, decay_ms=0,            # ADSR envelope (ms)
           sustain=1.0, release_ms=0)
 # wave = py16.WAVE_SQUARE | py16.WAVE_TRIANGLE | py16.WAVE_SAW | py16.WAVE_NOISE
+
+# Sample playback (16 sample slots, .ogg or .wav files, max 256 KB each):
+py16.load_sample(slot, "kick.ogg", base_note=24, name="KICK")  # load into slot
+py16.play_sample(slot, note=24)            # play at given pitch (note=None = base pitch)
+py16.set_sample_base_note(slot, 30)        # change pitch reference
+# Samples are also usable as instruments 8..23 in SFX patches and music tracks.
 ```
 
 ## Math helpers
@@ -189,7 +239,7 @@ Put this anywhere in the cart code. It will appear on the PDF manual page:
 # @end
 ```
 
-## Common pitfalls (please don't make these mistakes)
+## Common pitif (please don't make these mistakes)
 
 - **Don't use pygame constants for keys.** Use strings: `py16.btn('left')`
   not `py16.btn(pygame.K_LEFT)`.

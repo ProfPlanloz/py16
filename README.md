@@ -79,7 +79,7 @@ py16/
 ├── input.py           btn, btnp, mouse_*
 ├── audio.py           tone() + waveform generator with ADSR/PWM
 ├── sfx_data.py        Data models for SFX/music
-├── tracker.py         Background sequencer with effects
+├── tracker.py         background sequencer with effects
 ├── mathx.py           rnd, flr, mid, sin, cos, atan2, t, fps
 ├── cart.py            save_cart, load_cart (.p16 and .pdf)
 ├── cart_pdf.py        PDF export with manual
@@ -188,6 +188,49 @@ real covers instead of generic booklet icons.
 
 Needs `pip install pymupdf pillow`.
 
+The cover cache grows over time, especially if you delete or rename
+cart files. Clean it up with:
+
+```bash
+py16 --cache-stats           # show what's cached
+py16 --cleanup-cache         # remove orphans (default)
+py16 --cleanup-cache --age 30          # also remove entries older than 30 days
+py16 --cleanup-cache --size 50         # keep total size below 50 MB
+py16 --cleanup-cache --dry-run         # show what would be removed
+```
+
+There's also a "CLEAN COVER CACHE" entry in the BIOS power menu (F12).
+
+### Screen recording (MP4 / GIF)
+
+Press **Ctrl+R** anywhere in py-16 to start recording. A small red REC
+indicator with a seconds counter appears in the top-right corner. Press
+Ctrl+R again to stop — the recording is saved in `~/.py16/recordings/`.
+
+**Format:** MP4 by default (recommended), GIF as fallback.
+
+- **MP4 (preferred):** ~5-10x smaller than GIF, better quality, plays on
+  every browser/social platform. Output is 4x upscaled (1024x896) with
+  nearest-neighbor for crisp pixels on YouTube, Twitter, etc.
+- **GIF (fallback):** native 256x224, 256-color palette, plays inline
+  on Reddit and Discord without a player.
+
+Install MP4 support with: `pip install imageio imageio-ffmpeg`. Without
+those, py-16 falls back to GIF automatically.
+
+You can override the format in `~/.py16/config.json`:
+```json
+{ "recording_format": "mp4" }    // or "gif" or "auto" (default)
+```
+
+**Other details:**
+- Captures at ~30 fps (every other engine frame)
+- Auto-stops after 60 seconds (configurable) to bound RAM
+- A 30-second MP4 typically lands at 500 KB - 2 MB
+- A 30-second GIF typically lands at 2-5 MB
+- The REC indicator is drawn after frame capture, so it does NOT appear
+  in the exported file — the recording is just your raw cart visuals
+
 ## API overview
 
 ### Graphics
@@ -267,6 +310,217 @@ ADSR and pulse-width are stored per SFX patch and restored when the
 cart loads. Old carts without these fields load with default values
 (flat envelope, 50% square wave).
 
+### Sample playback
+
+In addition to the 4 synthesized waveforms, py-16 has 16 sample slots
+that can hold short `.ogg` or `.wav` audio clips (max 256 KB each).
+Samples are pitch-shifted on playback like a real sampler — higher
+notes shorten the clip, lower notes stretch it.
+
+```python
+# Load a sample from disk into slot 0
+py16.load_sample(0, "drums/kick.ogg", base_note=24, name="KICK")
+
+# Play it directly (pitched at the slot's base note)
+py16.play_sample(0)
+
+# Play at a different pitch (shift up an octave)
+py16.play_sample(0, note=36)
+```
+
+Samples are also usable as instruments in SFX patches and music tracks.
+Instrument numbers 8-23 reference sample slots 0-15. So if you load a
+kick drum into slot 0, you can use INST=8 in any SFX cell to trigger
+that kick at the cell's note pitch — perfect for making drum patterns
+in the music editor.
+
+The samples are embedded in the cart file (base64 in the JSON / PDF
+attachment), so a single `.pdf` cart contains everything: code, sprites,
+maps, music, and samples.
+
+Needs `pip install pygame` (already a hard dependency, no extra setup).
+For loading `.ogg` files, you might need `pip install pygame[mixer]` on
+some systems.
+
+### Multi-layer maps (SNES BG1-BG4 style)
+
+py-16 has 4 independent map layers, like the SNES had 4 background
+planes. Each layer is its own 128x128 tile map; the cart code chooses
+which layers to draw and in what order. Classic use:
+
+| Layer | Typical role |
+|---|---|
+| 0 | Distant background — slow-parallax mountains, sky details |
+| 1 | Mid background — clouds, far buildings |
+| 2 | Gameplay terrain — the actual playable level |
+| 3 | Foreground — vegetation in front of the player, fog |
+
+```python
+def draw():
+    py16.cls(13)                          # base sky color
+
+    # Distant mountains, slow parallax (0.2x speed)
+    py16.draw_map(int(cam_x*0.2)//8, 0, ..., layer=0)
+
+    # Clouds, slower parallax (0.5x)
+    py16.draw_map(int(cam_x*0.5)//8, 0, ..., layer=1)
+
+    # Gameplay terrain (1:1 scroll)
+    py16.draw_map(int(cam_x)//8, 0, ..., layer=2)
+
+    # Player and entities here
+    py16.spr(player_id, x, y)
+
+    # Foreground grass (drawn over the player)
+    py16.draw_map(int(cam_x)//8, 0, ..., layer=3)
+```
+
+**API:** `mset`, `mget`, `mclear`, `draw_map` all take an optional
+`layer=0..3` parameter. Default is layer 0, so existing single-layer
+carts work unchanged.
+
+**Map editor:** F2 opens the editor. Press **1, 2, 3, 4** to switch
+between the active layers. The currently-edited layer is shown as
+"L1"-"L4" in the title bar; tabs in the top right show which layer
+you're on. Inactive layers are dimmed in the background so you can
+see how your work fits with what's below/above.
+
+**Cart format:** layers are stored only if non-empty, so a cart that
+only uses layer 0 stays the same size as before. Old carts without a
+`map_layers` field load fine — extra layers are simply zero.
+
+**Mode 7:** `py16.mode7(..., layer=N)` lets you choose which layer
+becomes the ground plane texture, e.g. for switching between racing
+tracks in different game modes.
+
+A working parallax demo is in `examples/parallax_demo.py`.
+
+### Mode 7 (perspective ground plane)
+
+The classic SNES Mode 7 effect: project the tile map onto a
+perspective-distorted ground plane that fluchtes into the distance.
+Used in Super Mario Kart, F-Zero, Pilotwings.
+
+```python
+def draw():
+    py16.cls(12)                          # blue sky
+    py16.mode7(cam_x, cam_y, angle,
+               horizon_y=80,              # screen Y of horizon line
+               cam_height=30,             # camera height above ground
+               focal_length=70,           # FOV-ish (smaller = wider)
+               sky_color=None)            # already drew our own sky
+    # ...draw player car / sprites on top
+```
+
+The map (`mset/mget`, 128x128 tiles) becomes the ground texture. With
+numpy installed, this renders at 60+ FPS even when the camera moves
+and rotates every frame. Without numpy, a slower fallback is used
+(every 2nd pixel, still playable).
+
+A working drivable demo is in `examples/mode7_demo.py`.
+
+#### Per-scanline effects
+
+The classic Mode-7 trick: each scanline can use a slightly different
+camera angle or position, producing wobble, shake, twist, and curve
+effects that defined SNES games like F-Zero and Pilotwings.
+
+```python
+n_rows = py16.HEIGHT - horizon_y
+
+# Heat / water shimmer
+wave = py16.mode7_wave(n_rows, time=frame * 0.1, amplitude=6)
+py16.mode7(cx, cy, angle, scanline_offsets_x=wave, ...)
+
+# Screen shake (boss impact, explosion)
+ox, oy = py16.mode7_earthquake(n_rows, time=frame, amplitude=4)
+py16.mode7(cx, cy, angle, scanline_offsets_x=ox, scanline_offsets_y=oy, ...)
+
+# Wormhole / magic tunnel
+twist = py16.mode7_tunnel(n_rows, twist=0.5)
+py16.mode7(cx, cy, angle, scanline_angles=twist, ...)
+
+# Winding road (racing games)
+curve = py16.mode7_curve(n_rows, time=frame, curvature=0.3)
+py16.mode7(cx, cy, angle, scanline_angles=curve, ...)
+```
+
+You can also pass your own list/numpy array of length `n_rows` for
+fully custom effects. See `examples/mode7_effects.py` for live demos
+of all four built-ins.
+
+### Gamepad / joystick support (up to 4 players)
+
+USB gamepads work out of the box. Connect any controller before starting
+or hot-plug it during play — py-16 detects it automatically and maps
+its inputs to the same logical buttons that the keyboard uses:
+
+| Gamepad | Logical button | Keyboard equivalent |
+|---|---|---|
+| D-Pad / left analog stick | up/down/left/right | arrow keys |
+| A (south face button) | z | Z |
+| B (east face button) | x | X |
+| X (west face button) | a | A |
+| Y (north face button) | s | S |
+| Start | enter | Enter |
+| Back / Select | space | Space |
+| Left shoulder | shift | Shift |
+
+A cart written for the keyboard automatically works on a gamepad. You
+don't need a separate code path. `py16.btn('left')` returns True
+whether the keyboard arrow is pressed or the gamepad D-Pad is held.
+
+#### Multi-player (couch co-op)
+
+py-16 supports up to 4 players, each with their own gamepad. The first
+connected controller becomes Player 1, the second becomes Player 2, etc.
+Use the optional `player=N` argument to query a specific player:
+
+```python
+def update():
+    # Player 1
+    if py16.btn('left',  player=1): p1_x -= 2
+    if py16.btn('right', player=1): p1_x += 2
+    if py16.btnp('z',    player=1): p1_jump()
+
+    # Player 2
+    if py16.btn('left',  player=2): p2_x -= 2
+    if py16.btn('right', player=2): p2_x += 2
+    if py16.btnp('z',    player=2): p2_jump()
+```
+
+**Keyboard fallback:** if zero gamepads are connected, the keyboard
+is treated as Player 1. Once any gamepad is connected, Player 1 means
+that gamepad and the keyboard becomes "any source" only (queryable
+with `player=0` or no player argument). Player 2..4 are never the
+keyboard, so a multi-player cart can rely on `btn('z', player=2)` to
+mean "the second person's gamepad".
+
+**Slot management API:**
+
+```python
+py16.player_count()              # how many players have a controller
+py16.player_connected(N)         # is player slot N filled? (1..4)
+py16.player_name(N)              # name of P_N's controller, or None
+py16.num_controllers()           # total connected (== player_count())
+py16.MAX_PLAYERS                 # 4
+```
+
+When a controller is unplugged its slot becomes empty; the cart can
+detect this with `player_connected(N)` and pause until they reconnect.
+Reconnection fills the lowest free slot.
+
+**For Pi-console builds** where there's no F12 key on hand: pressing
+**Start + Back simultaneously** on any gamepad triggers BIOS exit,
+equivalent to F12.
+
+py-16 uses pygame's higher-level Controller API which consults SDL2's
+gamepad mapping database, so most controllers work without manual
+configuration. Exotic controllers fall back to a generic Joystick
+mapping (button 0 → z, button 1 → x, etc.).
+
+A 2-player Pong demo is in `examples/pong2p.py`.
+
 ### Editors at runtime
 
 | Key | Effect |
@@ -277,11 +531,12 @@ cart loads. Old carts without these fields load with default values
 | F4 | Toggle music editor |
 | F6 | Toggle code editor |
 | F7 | Toggle PDF editor (cover/title/author before PDF export) |
+| F10 | Toggle sample editor (load .ogg/.wav into 16 sample slots) |
 | F9 | Reload cart code (in editor: run code) |
 | F11 | Toggle fullscreen |
 | F12 | Back to BIOS (universal escape) |
 | F5 | Save cart (`.p16` AND `.pdf` in parallel) |
-| F8 | Load cart (prefers `.pdf`, falls back to `.p16`) |
+| F8 | Load cart (prefers `.pdf`, if back to `.p16`) |
 | ESC | Leave editor / quit game |
 
 **Code editor:** Full-featured text editor with cursor, selection,
@@ -313,7 +568,7 @@ you start `python3 demo.py` and press F5, you get `demo.p16` and
 `untitled.p16`/`untitled.pdf` in the configured cart directory
 (default `~/.py16/carts/`).
 
-**Load (F8):** prefers `.pdf` (if present), falls back to `.p16`.
+**Load (F8):** prefers `.pdf` (if present), if back to `.p16`.
 This makes the PDF the canonical form, always containing your latest
 state - including the manual.
 

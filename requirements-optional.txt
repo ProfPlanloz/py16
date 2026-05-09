@@ -1,11 +1,17 @@
-# Optional, aber sehr empfohlen - beschleunigt Bildladung,
-# Cart-IO und Cover-Rendering um den Faktor 50-200x
+# Optional but strongly recommended -- speeds up image loading,
+# cart I/O, cover rendering and Mode 7 by 50-200x
 numpy>=1.24
 
-# Fuer PDF-Export (cart als .pdf mit Handbuch speichern)
+# For PDF export (save cart as .pdf with manual)
 pillow>=10.0
 reportlab>=4.0
 pypdf>=4.0
 
-# Fuer PDF-Cover-Vorschauen im Boot-Cart-Browser
+# For PDF cover previews in the boot-cart browser
 pymupdf>=1.23
+
+# For MP4 screen recording (Ctrl+R). Without these, recording falls
+# back to GIF, which works but produces 5-10x larger files for the
+# same content.
+imageio>=2.30
+imageio-ffmpeg>=0.4

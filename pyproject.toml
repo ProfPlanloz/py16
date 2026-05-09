@@ -10,7 +10,7 @@ readme = "README.md"
 license = {file = "LICENSE"}
 requires-python = ">=3.9"
 authors = [
-    {name = "Prof.Planloz"},
+    {name = "ProfPlanloz"},
 ]
 keywords = ["fantasy-console", "16-bit", "game-engine", "pygame", "retro", "pixel-art"]
 classifiers = [
@@ -35,28 +35,36 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Beschleunigung (sehr empfohlen)
+# Speedup (strongly recommended)
 fast = [
     "numpy>=1.24",
 ]
-# PDF-Export (Cart als PDF mit Handbuch speichern)
+# PDF export (save cart as .pdf with manual)
 pdf = [
     "pillow>=10.0",
     "reportlab>=4.0",
     "pypdf>=4.0",
 ]
-# PDF-Cover-Vorschauen im Boot-Cart
+# PDF cover previews in the boot cart
 covers = [
     "pymupdf>=1.23",
     "pillow>=10.0",
 ]
-# Alle optionalen Features auf einmal
+# MP4 screen recording (Ctrl+R)
+recording = [
+    "imageio>=2.30",
+    "imageio-ffmpeg>=0.4",
+    "numpy>=1.24",
+]
+# All optional features at once
 all = [
     "numpy>=1.24",
     "pillow>=10.0",
     "reportlab>=4.0",
     "pypdf>=4.0",
     "pymupdf>=1.23",
+    "imageio>=2.30",
+    "imageio-ffmpeg>=0.4",
 ]
 
 [project.urls]

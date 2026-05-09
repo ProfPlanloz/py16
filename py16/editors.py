@@ -1,8 +1,8 @@
 """
 py16.editors
 ============
-Eingebaute Editoren fuer Sprites (F1) und Map (F2). Auswahl per Maus,
-Flag-Toggle per Zifferntasten 0-7.
+Built-in editors for sprites (F1) and map (F2). Selection via mouse,
+Flag-Toggle per Ziffernkeyn 0-7.
 """
 
 import pygame
@@ -38,7 +38,7 @@ SE_SHEET_X,  SE_SHEET_Y,  SE_SHEET_SCALE = 160, 12, 0.25  # 64x64
 def sprite_editor_update():
     mx, my = state.mouse_x, state.mouse_y
 
-    # Canvas: malen (links) oder loeschen (rechts)
+    # Canvas: paint (left) or erase (right)
     if mouse_btn(0) or mouse_btn(2):
         if _in_rect(mx, my, SE_CANVAS_X, SE_CANVAS_Y,
                     8 * SE_CANVAS_PIX, 8 * SE_CANVAS_PIX):
@@ -66,7 +66,7 @@ def sprite_editor_update():
         cy = int(rel_y // SPRITE_PIX)
         state.edit_sprite = cy * SPRITES_PER_ROW + cx
 
-    # Tastatur
+    # keyboard
     if btnp('left'):
         state.edit_sprite = (state.edit_sprite - 1) % 1024
     if btnp('right'):
@@ -138,7 +138,7 @@ def sprite_editor_draw():
     text("PFEILE WECHSELN SPR",   90, 92,  6)
     text("0-7 FLAG TOGGLE",       90, 100, 6)
     text("F2 MAP F5 SAVE F8 LOAD", 4, 210, 7)
-    text("ESC ZURUECK",           160, 210, 7)
+    text("ESC BACK",           160, 210, 7)
 
 # ======================================================================
 # MAP-EDITOR
@@ -154,13 +154,22 @@ ME_PICK_TILES_PER_PAGE   = 256
 def map_editor_update():
     mx, my = state.mouse_x, state.mouse_y
 
+    # Layer selector: keys 1..4 switch the active layer
+    for k, idx in ((pygame.K_1, 0), (pygame.K_2, 1),
+                   (pygame.K_3, 2), (pygame.K_4, 3)):
+        if state.keys.get(k, False) and not state.keys_prev.get(k, False):
+            state.edit_map_layer = idx
+
+    layer = getattr(state, "edit_map_layer", 0)
+
     if (mouse_btn(0) or mouse_btn(2)) and _in_rect(
             mx, my, ME_MAP_X, ME_MAP_Y,
             ME_MAP_TILES_W * 8, ME_MAP_TILES_H * 8):
         cx = state.edit_map_cam[0] + (mx - ME_MAP_X) // 8
         cy = state.edit_map_cam[1] + (my - ME_MAP_Y) // 8
         if 0 <= cx < MAP_W and 0 <= cy < MAP_H:
-            mset(cx, cy, state.edit_tile if mouse_btn(0) else 0)
+            mset(cx, cy, state.edit_tile if mouse_btn(0) else 0,
+                 layer=layer)
 
     if mouse_btnp(0) and _in_rect(mx, my, ME_PICK_X, ME_PICK_Y,
                                   ME_PICK_W, ME_PICK_H):
@@ -187,17 +196,44 @@ def map_editor_update():
 def map_editor_draw():
     from .graphics import camera
     cls(0)
+
+    layer = getattr(state, "edit_map_layer", 0)
+
+    # Title bar with layer indicator (UI uses 1..4, internal layer=0..3)
     rectfill(0, 0, WIDTH, 9, 1)
-    text(f"MAP EDIT  CAM:{state.edit_map_cam[0]:03d},"
+    text(f"MAP L{layer+1}  CAM:{state.edit_map_cam[0]:03d},"
          f"{state.edit_map_cam[1]:03d}  TILE:{state.edit_tile:04d}",
          2, 2, 7)
+
+    # Layer tabs on the right side of the title bar (1..4 in UI = 0..3 in API)
+    tab_x = WIDTH - 4 * 11 - 2
+    for i in range(4):
+        tab_color = 11 if i == layer else 6
+        bg_color = 13 if i == layer else 5
+        rectfill(tab_x + i * 11, 1, 9, 7, bg_color)
+        text(f"{i+1}", tab_x + i * 11 + 3, 2, tab_color)
 
     saved_cam = (state.cam_x, state.cam_y)
     camera(state.edit_map_cam[0] * 8 - ME_MAP_X,
            state.edit_map_cam[1] * 8 - ME_MAP_Y)
+
+    # Render the OTHER layers dimmed in the background, then the active
+    # layer brightly on top. This gives spatial context (you can see how
+    # your work relates to layers above and below).
+    for li in range(4):
+        if li == layer:
+            continue
+        # Note: there's no easy way to "dim" sprites without rebuilding
+        # them; instead we just draw the active layer last so it stays
+        # crisp on top.
+        draw_map(state.edit_map_cam[0], state.edit_map_cam[1],
+                 state.edit_map_cam[0] * 8, state.edit_map_cam[1] * 8,
+                 ME_MAP_TILES_W, ME_MAP_TILES_H,
+                 layer=li)
     draw_map(state.edit_map_cam[0], state.edit_map_cam[1],
              state.edit_map_cam[0] * 8, state.edit_map_cam[1] * 8,
-             ME_MAP_TILES_W, ME_MAP_TILES_H)
+             ME_MAP_TILES_W, ME_MAP_TILES_H,
+             layer=layer)
     camera(*saved_cam)
 
     # Gitter alle 4 Tiles
@@ -215,7 +251,7 @@ def map_editor_draw():
         cy = (state.mouse_y - ME_MAP_Y) // 8
         rect(ME_MAP_X + cx * 8, ME_MAP_Y + cy * 8, 8, 8, 7)
 
-    # Trennlinie und Picker
+    # divider line and Picker
     rectfill(0, 140, WIDTH, 4, 1)
     text(f"PAGE {state.edit_picker_page+1}/4  A/S", 2, 141, 7)
 
@@ -233,7 +269,7 @@ def map_editor_draw():
         cy = local // SPRITES_PER_ROW
         rect(ME_PICK_X + cx * 8 - 1, ME_PICK_Y + cy * 8 - 1, 10, 10, 8)
 
-    text("LMB SETZEN RMB LOESCHEN", 4, 210, 7)
+    text("LMB PAINT  RMB ERASE  1-4 LAYER", 4, 210, 7)
     text("F1 SPR  F5 SAVE  F8 LOAD  ESC", 4, 217, 7)
 
 # ======================================================================

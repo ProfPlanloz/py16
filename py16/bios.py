@@ -82,7 +82,7 @@ def bios_update():
             state.bios_cursor = max(0, min(len(state.bios_cart_list) - 1,
                                            state.bios_cursor + dx))
 
-    # Scroll offset anpassen
+    # Scroll offset adjust
     if state.bios_cursor < state.bios_scroll:
         state.bios_scroll = state.bios_cursor
     if state.bios_cursor >= state.bios_scroll + VISIBLE_LINES:
@@ -102,7 +102,7 @@ def bios_update():
             _refresh_carts()
             _set_msg("CART LIST REFRESHED", 11)
 
-    # F6: leeren Code-Editor open
+    # F6: open empty code editor
     if state.keys.get(pygame.K_F6, False) and not state.keys_prev.get(pygame.K_F6, False):
         from . import code_editor
         code_editor._ensure_state()
@@ -185,10 +185,11 @@ def bios_draw():
 # ----------------------------------------------------------------------
 
 POWER_OPTIONS = [
-    ("BACK TO BIOS",   None),
-    ("SHUTDOWN",       "power_off_cmd"),
-    ("REBOOT",         "reboot_cmd"),
-    ("QUIT TO DESKTOP", "quit"),
+    ("BACK TO BIOS",     None),
+    ("CLEAN COVER CACHE", "clean_cache"),
+    ("SHUTDOWN",         "power_off_cmd"),
+    ("REBOOT",           "reboot_cmd"),
+    ("QUIT TO DESKTOP",  "quit"),
 ]
 
 def _power_menu_update():
@@ -203,6 +204,9 @@ def _power_menu_update():
             state.bios_in_power = False
         elif action == "quit":
             pygame.event.post(pygame.event.Event(pygame.QUIT))
+        elif action == "clean_cache":
+            _do_clean_cache()
+            state.bios_in_power = False
         else:
             cmd = config.get_config().get(action)
             if cmd:
@@ -211,10 +215,23 @@ def _power_menu_update():
                 _set_msg(f"NO COMMAND FOR {label}", 8)
                 state.bios_in_power = False
 
-    # ESC verlaesst Power-Menue
+    # ESC exits power menu
     for k in (pygame.K_ESCAPE,):
         if state.keys.get(k, False) and not state.keys_prev.get(k, False):
             state.bios_in_power = False
+
+def _do_clean_cache():
+    """Run cover cache cleanup and show feedback in BIOS status bar."""
+    try:
+        from . import cart_covers
+        result = cart_covers.cleanup_cache(remove_orphans=True)
+        kb = result["freed_bytes"] // 1024
+        if result["removed"] == 0:
+            _set_msg("CACHE CLEAN: NOTHING TO REMOVE", 11)
+        else:
+            _set_msg(f"REMOVED {result['removed']} FILES ({kb}KB)", 11)
+    except Exception as e:
+        _set_msg(f"CACHE CLEAN FAILED: {e}", 8)
 
 def _power_menu_draw():
     # Box in der Mitte

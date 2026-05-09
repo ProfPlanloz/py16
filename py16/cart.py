@@ -63,23 +63,82 @@ def _save_cart_p16(filename):
         sheet_bytes = bytes(sheet_bytes)
 
     cart = {
-        "version":   3,
-        "engine":    "py-16",
-        "width":     SHEET_SIZE,
-        "height":    SHEET_SIZE,
-        "sheet":     base64.b64encode(sheet_bytes).decode("ascii"),
-        "map":       state.map_data,
-        "flags":     state.sprite_flags,
-        "sfx":       getattr(state, "sfx_patches", []),
-        "patterns":  getattr(state, "music_patterns", []),
-        "tracks":    getattr(state, "music_tracks", []),
-        "code":      getattr(state, "cart_code", ""),
-        "code_file": getattr(state, "cart_code_file", None),
-        "meta":      getattr(state, "cart_meta", {}) or {},
+        "version":    3,
+        "engine":     "py-16",
+        "width":      SHEET_SIZE,
+        "height":     SHEET_SIZE,
+        "sheet":      base64.b64encode(sheet_bytes).decode("ascii"),
+        "map":        state.map_data,
+        "map_layers": _serialize_map_layers(),
+        "flags":      state.sprite_flags,
+        "sfx":        getattr(state, "sfx_patches", []),
+        "patterns":   getattr(state, "music_patterns", []),
+        "tracks":     getattr(state, "music_tracks", []),
+        "samples":    _serialize_samples(),
+        "code":       getattr(state, "cart_code", ""),
+        "code_file":  getattr(state, "cart_code_file", None),
+        "meta":       getattr(state, "cart_meta", {}) or {},
     }
     with open(filename, "w") as f:
         json.dump(cart, f)
     print(f"Cart saved: {filename}")
+
+def _serialize_map_layers():
+    """Returns the extra layers (1..3) for cart JSON. Empty layers
+    are stored as None to keep the cart small if the cart only uses
+    layer 0."""
+    layers = getattr(state, "map_layers", None)
+    if not layers:
+        return []
+    out = []
+    for layer in layers:
+        is_empty = all(all(v == 0 for v in row) for row in layer)
+        out.append(None if is_empty else layer)
+    return out
+
+def _restore_map_layers(loaded):
+    """Restore layers 1..3 from cart data. Each entry can be a 2D map
+    array or None (=> blank layer). Missing entries also count as blank."""
+    from .core import MAP_W, MAP_H
+    from .maps import NUM_LAYERS
+    n_extra = NUM_LAYERS - 1
+    if not hasattr(state, "map_layers") or state.map_layers is None:
+        state.map_layers = [
+            [[0] * MAP_W for _ in range(MAP_H)] for _ in range(n_extra)
+        ]
+    for i in range(n_extra):
+        if i < len(loaded) and loaded[i] is not None:
+            state.map_layers[i] = loaded[i]
+        else:
+            # Reset to all zeros
+            for row in state.map_layers[i]:
+                for j in range(len(row)):
+                    row[j] = 0
+
+def _clear_extra_layers():
+    """Reset layers 1..3 to all zero (used when loading an old cart
+    without map_layers field)."""
+    from .core import MAP_W, MAP_H
+    from .maps import NUM_LAYERS
+    n_extra = NUM_LAYERS - 1
+    if not hasattr(state, "map_layers") or state.map_layers is None:
+        state.map_layers = [
+            [[0] * MAP_W for _ in range(MAP_H)] for _ in range(n_extra)
+        ]
+    else:
+        for layer in state.map_layers:
+            for row in layer:
+                for j in range(len(row)):
+                    row[j] = 0
+
+def _serialize_samples():
+    """Returns sample slots as cart-JSON-friendly list, or empty list
+    if samples module isn't available."""
+    try:
+        from . import samples
+        return samples.serialize_for_cart()
+    except Exception:
+        return []
 
 # ======================================================================
 # LADEN
@@ -118,7 +177,14 @@ def _load_cart_p16(filename):
     state.map_data[:]     = cart["map"]
     state.sprite_flags[:] = cart["flags"]
 
-    # SFX/Music load, if available (rueckwaertskompatibel mit v1)
+    # Restore extra map layers (1..3). Backward-compat: old carts
+    # without "map_layers" simply leave layers 1-3 empty.
+    if "map_layers" in cart:
+        _restore_map_layers(cart["map_layers"])
+    else:
+        _clear_extra_layers()
+
+    # SFX/Music load, if available (rueckwaertskompatibel with v1)
     if "sfx" in cart and hasattr(state, "sfx_patches"):
         loaded_sfx = cart["sfx"]
         for i, p in enumerate(loaded_sfx):
@@ -143,15 +209,21 @@ def _load_cart_p16(filename):
             if i >= len(state.music_tracks):
                 break
             state.music_tracks[i] = list(t)
+    if "samples" in cart:
+        try:
+            from . import samples
+            samples.restore_from_cart(cart["samples"])
+        except Exception as e:
+            print(f"Sample restore failed: {e}")
 
-    # Code-Felder load (rueckwaertskompatibel mit v1/v2)
+    # Code-Felder load (rueckwaertskompatibel with v1/v2)
     if "code" in cart:
         state.cart_code = cart["code"]
     if "code_file" in cart:
         state.cart_code_file = cart["code_file"]
     if "meta" in cart:
         state.cart_meta = cart["meta"] or {}
-    # Wenn Code-Editor schon mal aktiv war: Lines-Buffer refresh
+    # If code editor was active: refresh lines buffer
     if hasattr(state, "ce_lines"):
         from . import code_editor
         state.ce_lines = code_editor._text_to_lines(state.cart_code)
