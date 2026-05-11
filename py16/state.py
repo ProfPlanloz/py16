@@ -32,6 +32,8 @@ cam_x         = 0
 cam_y         = 0
 clip_rect     = None
 frame_count   = 0
+blend_mode    = "normal"   # "normal" | "add" | "sub" | "alpha"
+blend_alpha   = 128        # 0..255, used when blend_mode == "alpha"
 
 # ----------------------------------------------------------------------
 # Map and Sprite-Flags

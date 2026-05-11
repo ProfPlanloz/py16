@@ -315,23 +315,37 @@ def _make_screenshot_image():
 # COVER-SETTINGS
 # ----------------------------------------------------------------------
 
-# Font-Mapping: interne Namen -> ReportLab-Font-Familie (regular, bold, oblique)
+# Map each family to a 4-tuple: (regular, bold, italic, bold_italic).
+# These are the standard 14 PDF fonts; ReportLab knows them by name.
 FONT_FAMILIES = {
-    "helvetica": ("Helvetica", "Helvetica-Bold", "Helvetica-Oblique"),
-    "courier":   ("Courier", "Courier-Bold", "Courier-Oblique"),
-    "times":     ("Times-Roman", "Times-Bold", "Times-Italic"),
-    # "pixel" als Familie gibt es nicht in ReportLab Standard - wir mappen
-    # auf Courier-Bold (monospace) als approximation.
-    "pixel":     ("Courier-Bold", "Courier-Bold", "Courier-BoldOblique"),
+    "helvetica": ("Helvetica", "Helvetica-Bold",
+                  "Helvetica-Oblique", "Helvetica-BoldOblique"),
+    "courier":   ("Courier", "Courier-Bold",
+                  "Courier-Oblique", "Courier-BoldOblique"),
+    "times":     ("Times-Roman", "Times-Bold",
+                  "Times-Italic", "Times-BoldItalic"),
+    # "pixel" is not a real PDF font; we map it to Courier-Bold (monospace)
+    "pixel":     ("Courier-Bold", "Courier-Bold",
+                  "Courier-BoldOblique", "Courier-BoldOblique"),
 }
 
 DEFAULT_COVER = {
-    "color_bg":          1,    # Pico-Dunkelblau
-    "color_band":        14,   # Pico-Pink
-    "color_title_text":  0,    # Schwarz
-    "color_author_text": 7,    # Weiss
+    "color_bg":          1,    # Pico dark blue
+    "color_band":        14,   # Pico pink
+    "color_title_text":  0,    # black
+    "color_author_text": 7,    # white
     "font":              "helvetica",
     "custom_image":      None,
+    # Title styling
+    "title_size":        32,
+    "title_bold":        True,
+    "title_italic":      False,
+    "title_underline":   False,
+    # Author styling
+    "author_size":       10,
+    "author_bold":       True,
+    "author_italic":     False,
+    "author_underline":  False,
 }
 
 def _cover_settings():
@@ -352,10 +366,50 @@ def _palette_to_rgb_normalized(idx):
     return (0, 0, 0)
 
 def _font_for(s, weight="regular"):
-    """Returns the ReportLab font name for the setting."""
+    """Returns the ReportLab font name for the setting.
+
+    weight: "regular", "bold", "oblique", or "bold_oblique"."""
     family = s.get("font", "helvetica")
     fonts = FONT_FAMILIES.get(family, FONT_FAMILIES["helvetica"])
-    return {"regular": fonts[0], "bold": fonts[1], "oblique": fonts[2]}[weight]
+    idx = {"regular": 0, "bold": 1, "oblique": 2, "bold_oblique": 3}.get(weight, 0)
+    return fonts[idx]
+
+def _font_variant(s, bold, italic):
+    """Build the right font variant from bold/italic flags."""
+    if bold and italic:
+        return _font_for(s, "bold_oblique")
+    if bold:
+        return _font_for(s, "bold")
+    if italic:
+        return _font_for(s, "oblique")
+    return _font_for(s, "regular")
+
+def _draw_text_styled(c, text, x, y, font_name, font_size, underline=False,
+                      centered=True):
+    """Draw text with optional underline. ReportLab has no native underline
+    so we measure the string width and draw a line below it.
+
+    If centered=True, x is the center; else x is the left edge."""
+    c.setFont(font_name, font_size)
+    if centered:
+        c.drawCentredString(x, y, text)
+    else:
+        c.drawString(x, y, text)
+
+    if not underline or not text:
+        return
+
+    # Measure the string and draw a line below
+    from reportlab.pdfbase.pdfmetrics import stringWidth
+    width = stringWidth(text, font_name, font_size)
+    underline_y = y - font_size * 0.18   # slight gap below baseline
+    line_thickness = max(0.5, font_size * 0.04)
+    if centered:
+        x0 = x - width / 2
+    else:
+        x0 = x
+    c.setLineWidth(line_thickness)
+    c.line(x0, underline_y, x0 + width, underline_y)
 
 def _decode_custom_image():
     """Wandelt das base64-embedded Custom-Bild in ein PIL-Image um.
@@ -390,9 +444,12 @@ def _draw_cover(c, w, h, title, author):
     # Title text on the band
     title_rgb = _palette_to_rgb_normalized(s["color_title_text"])
     c.setFillColorRGB(*title_rgb)
-    c.setFont(_font_for(s, "bold"), 32)
-    c.drawCentredString(w / 2, h - 65*mm, title)
+    title_font = _font_variant(s, s["title_bold"], s["title_italic"])
+    _draw_text_styled(c, title, w / 2, h - 65*mm,
+                      title_font, s["title_size"],
+                      underline=s["title_underline"], centered=True)
 
+    # Subtitle (engine name) - this stays as our fixed style
     c.setFont(_font_for(s, "regular"), 12)
     c.drawCentredString(w / 2, h - 75*mm, "PY-16 FANTASY CONSOLE CARTRIDGE")
 
@@ -445,11 +502,13 @@ def _draw_cover(c, w, h, title, author):
         c.drawImage(ImageReader(img_buf), cx, cy,
                     width=disp_w * mm, height=disp_h * mm)
 
-    # Footer
+    # Footer: author + date with configurable styling
     author_rgb = _palette_to_rgb_normalized(s["color_author_text"])
     c.setFillColorRGB(*author_rgb)
-    c.setFont(_font_for(s, "bold"), 10)
-    c.drawCentredString(w / 2, 30*mm, f"BY {author.upper()}")
+    author_font = _font_variant(s, s["author_bold"], s["author_italic"])
+    _draw_text_styled(c, f"BY {author.upper()}", w / 2, 30*mm,
+                      author_font, s["author_size"],
+                      underline=s["author_underline"], centered=True)
     c.setFont(_font_for(s, "regular"), 9)
     today = datetime.date.today().isoformat()
     c.drawCentredString(w / 2, 22*mm, today)

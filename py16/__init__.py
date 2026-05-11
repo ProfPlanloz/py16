@@ -52,6 +52,7 @@ from .graphics import (
     rect, rectfill, line, circ, circfill,
     text,
     pal, palt,
+    blend_mode,
 )
 
 # ----------------------------------------------------------------------
@@ -61,6 +62,16 @@ from .sprites import (
     sset, sget,
     spr,
     load_spritesheet,
+)
+
+# ----------------------------------------------------------------------
+# Particles
+# ----------------------------------------------------------------------
+from .particles import (
+    particle, burst,
+    particles_update, particles_draw, particles_clear, particles_count,
+    Emitter, MAX_PARTICLES,
+    burst_explosion, burst_sparks, burst_smoke, burst_confetti,
 )
 
 # ----------------------------------------------------------------------
@@ -75,6 +86,15 @@ from .maps import (
 from .mode7 import (
     mode7,
     mode7_wave, mode7_earthquake, mode7_tunnel, mode7_curve,
+)
+from .scanlines import (
+    scanline_apply,
+    scanline_wave, scanline_jitter, scanline_lens,
+    scanline_interlace, scanline_pinch,
+)
+from .splitscreen import (
+    split_layout, viewport, for_each_player,
+    viewport_rect, num_viewports, viewport_local,
 )
 
 # ----------------------------------------------------------------------

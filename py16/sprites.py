@@ -2,7 +2,7 @@
 py16.sprites
 ============
 Sprite-Sheet: Pixel-Setzen, Sprite-Zeichnen mit Flip/Multi-Cel,
-Bilddatei-Quantisierung mit numpy-Beschleunigung.
+Bildfile-Quantisierung mit numpy-Beschleunigung.
 """
 
 import os
@@ -57,16 +57,28 @@ def spr(sprite_id, x, y, w=1, h=1, flip_x=False, flip_y=False):
     src = state.sprite_sheet.subsurface((sx, sy, pw, ph))
     if flip_x or flip_y:
         src = pygame.transform.flip(src, flip_x, flip_y)
-    state.screen.blit(src, (x - state.cam_x, y - state.cam_y))
+
+    m = getattr(state, "blend_mode", "normal")
+    dest = (x - state.cam_x, y - state.cam_y)
+    if m == "normal":
+        state.screen.blit(src, dest)
+    elif m == "alpha":
+        # Need a copy because set_alpha modifies the surface globally
+        tmp = src.copy()
+        tmp.set_alpha(state.blend_alpha)
+        state.screen.blit(tmp, dest)
+    else:
+        from .graphics import _blend_flag
+        state.screen.blit(src, dest, special_flags=_blend_flag())
 
 # ======================================================================
 # BILDLADUNG MIT FARBQUANTISIERUNG
 # ======================================================================
 
 def load_spritesheet(filename):
-    """Laedt PNG/Bild und quantisiert auf die aktuelle Palette."""
+    """Loads PNG/Bild und quantisiert auf die current Palette."""
     if not os.path.exists(filename):
-        print(f"WARNUNG: Bild '{filename}' nicht gefunden!")
+        print(f"WARNUNG: Bild '{filename}' not found!")
         return
     try:
         img = pygame.image.load(filename).convert()
@@ -75,7 +87,7 @@ def load_spritesheet(filename):
         else:
             _load_python(img)
     except Exception as e:
-        print(f"Fehler beim Bildladen: {e}")
+        print(f"Fehler beim Bildload: {e}")
 
 def _load_numpy(img):
     w = min(SHEET_SIZE, img.get_width())
@@ -84,7 +96,7 @@ def _load_numpy(img):
     pal = np.array(PALETTE, dtype=np.int32)
     diff = arr[..., None, :] - pal[None, None, :, :]
     dist = (diff * diff).sum(-1)
-    idx = dist.argmin(-1)
+    idx = d.argmin(-1)
     new_colors = pal[idx].astype(np.uint8)
     full = pygame.surfarray.array3d(state.sprite_sheet)
     full[:w, :h] = new_colors

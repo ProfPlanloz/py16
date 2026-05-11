@@ -50,16 +50,139 @@ py16.FPS        # 60
 py16.cls(c=0)                              # clear screen
 py16.pset(x, y, c)                         # one pixel
 py16.rect(x, y, w, h, c)                   # outlined rectangle
-py16.rectfill(x, y, w, h, c)               # filled rectangle
+py16.rectfill(x, y, w, h, c)               # filled rectangle (blendable)
 py16.line(x0, y0, x1, y1, c)               # line
 py16.circ(x, y, r, c)                      # outlined circle
-py16.circfill(x, y, r, c)                  # filled circle
-py16.text(s, x, y, c=7)                    # 3x5 pixel text
+py16.circfill(x, y, r, c)                  # filled circle (blendable)
+py16.text(s, x, y, c=7)                    # 3x5 pixel text (blendable)
 py16.camera(x, y)                          # camera offset for all draws
 py16.clip(x, y, w, h)                      # scissor rect, no args = reset
 py16.pal(c0, c1)                           # color remap (c0 -> c1 on draw)
 py16.palt(c, transparent=True)             # mark color as transparent
 ```
+
+## Blending (color math / transparency)
+
+```python
+py16.blend_mode("normal")                  # default, no blending
+py16.blend_mode("add")                     # additive  (glow, plasma, fire)
+py16.blend_mode("sub")                     # subtractive (shadows, eclipse)
+py16.blend_mode("alpha", alpha=128)        # 0..255 transparency (ghosts, water)
+```
+
+Affects `rectfill`, `circfill`, `spr`, `text`. Outline ops (`rect`,
+`circ`, `line`) and `cls` are unaffected. Switch back to `"normal"`
+before drawing UI. Pygame's hardware blending = 3000+ FPS even with
+40+ overlapping additive circles per frame.
+
+## Particles (fire, smoke, sparks, explosions, confetti)
+
+```python
+# One-off particle
+py16.particle(x, y, vx=0, vy=0,
+              life=60, color=7, size=1,
+              ax=0.0, ay=0.0,       # acceleration / gravity
+              drag=1.0,              # velocity multiplier
+              blend="normal")        # "normal" | "add" | "sub" | "alpha"
+
+# Burst from a single point (count particles radiating outward)
+py16.burst(x, y, count=20, color=8, life=30, speed=2.0,
+           size=1, spread_angle=2*pi, base_angle=0,
+           ax=0, ay=0, drag=1.0, blend="normal",
+           speed_var=0.5, life_var=0.5)
+
+# Presets (one-line common effects)
+py16.burst_explosion(x, y, color=8)     # add-blended boom + flash
+py16.burst_sparks(x, y, color=10)       # gravity-affected spray
+py16.burst_smoke(x, y, color=5)         # rising, alpha-blended
+py16.burst_confetti(x, y, count=30)     # multi-color falling
+
+# Continuous emitter (call .update() each frame)
+fire = py16.Emitter(x=100, y=200,
+                    rate=4,              # particles per frame
+                    life=30, life_var=0.3,
+                    vy=-2.0, vy_var=0.4,
+                    ay=-0.05,
+                    color_list=[8, 9, 10],   # red/orange/yellow
+                    size=2, blend="add")
+fire.update()                  # in your update()
+fire.emit = False              # pause emission
+
+# Required once per frame:
+py16.particles_update()        # physics tick
+py16.particles_draw()          # render all particles
+py16.particles_count()         # how many alive
+py16.particles_clear()         # remove all
+```
+
+Performance: 2000 particles at 200+ FPS on desktop, 60+ FPS on Pi 4
+with numpy installed. Without numpy, ~500 particles run smoothly.
+
+## Scanlines (HDMA-style horizontal distortion)
+
+Post-process the rendered frame by shifting each row horizontally,
+like SNES HDMA. Used for water, heat shimmer, lens distortion, CRT.
+
+```python
+def draw():
+    py16.cls(12)
+    draw_world()                              # gets distorted
+
+    # Apply effect to everything drawn so far:
+    wave = py16.scanline_wave(time=frame, amplitude=4, frequency=0.1)
+    py16.scanline_apply(x_offsets=wave, wrap=True)
+
+    draw_hud()                                # stays straight
+
+# Helpers (each returns a list of HEIGHT row offsets):
+py16.scanline_wave(time, amplitude=4, frequency=0.1, speed=2,
+                   y_start=0, y_end=None)         # smooth sine wave
+py16.scanline_jitter(amplitude=2, seed=None)      # random per-row shake
+py16.scanline_lens(center_y, strength=8, radius=40)  # convex bulge
+py16.scanline_interlace(odd_offset=1, even_offset=-1)  # CRT artifact
+py16.scanline_pinch(time, amplitude=2, period=60)  # full-screen breathing
+
+# Apply options:
+py16.scanline_apply(x_offsets, wrap=False, fill_color=0)
+#   wrap=True   : pixels wrap around (seamless waves)
+#   wrap=False  : gap filled with fill_color (default black)
+```
+
+`y_start`/`y_end` on helpers limit the effect to a vertical region —
+use `y_start=horizon_y` to only wave the water below the horizon.
+
+## Splitscreen (couch multiplayer)
+
+Render each player into their own viewport with independent cameras:
+
+```python
+def draw():
+    py16.split_layout("horizontal")     # "full"|"horizontal"|"vertical"|"quad"
+    for p in range(2):
+        py16.viewport(p + 1)              # 1..4 = each player's view
+        py16.camera(players[p].x - 64,
+                    players[p].y - 56)
+        draw_world()                       # draws inside this viewport only
+        draw_player(p)
+        # Per-viewport HUD label that stays put while camera scrolls:
+        wx, wy = py16.viewport_local(4, 4)
+        py16.text(f"P{p+1}", wx, wy, 11)
+    py16.viewport(0)                      # back to full screen
+    draw_shared_hud()                     # over all viewports
+
+py16.num_viewports()                      # 1, 2 or 4
+py16.viewport_rect(idx)                   # (x, y, w, h) in screen pixels
+py16.for_each_player(callback)            # convenience loop
+```
+
+Layouts: `"full"` (1 vp), `"horizontal"` (2 side-by-side), `"vertical"`
+(2 stacked), `"quad"` (2x2 for 3-4 players). `viewport(0)` is special:
+it removes clipping, used for shared HUD on top of all viewports.
+
+Each viewport keeps its own camera - switching viewports saves/restores
+it. `viewport_local(x, y)` returns world coordinates that land at
+local viewport position (x, y) regardless of the camera, perfect for
+per-viewport HUDs.
 
 ## Useful palette indices (first 16 are Pico-8-compatible)
 
@@ -238,6 +361,35 @@ Put this anywhere in the cart code. It will appear on the PDF manual page:
 # Code: Your name
 # @end
 ```
+
+## PDF cover styling
+
+The PDF editor (F7) has a STYLE tab where the cover title and author
+can be individually styled. These fields can also be set programmatically
+in `state.cart_meta`:
+
+```python
+state.cart_meta = {
+    "title":             "AWESOME GAME",
+    "author":            "YOUR NAME",
+    "font":              "helvetica",  # helvetica|times|courier|pixel
+    # ... colors, cover_style ...
+    # Title styling
+    "title_size":        32,    # 14..48 (preset sizes)
+    "title_bold":        True,
+    "title_italic":      False,
+    "title_underline":   False,
+    # Author styling
+    "author_size":       10,    # 8..24
+    "author_bold":       True,
+    "author_italic":     False,
+    "author_underline":  False,
+}
+```
+
+Bold+Italic combinations work because each font family has all 4
+variants (regular/bold/italic/bold-italic). Underline is drawn as a
+line below the text baseline.
 
 ## Common pitif (please don't make these mistakes)
 

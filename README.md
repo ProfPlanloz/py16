@@ -342,6 +342,185 @@ Needs `pip install pygame` (already a hard dependency, no extra setup).
 For loading `.ogg` files, you might need `pip install pygame[mixer]` on
 some systems.
 
+### Splitscreen (couch multiplayer)
+
+Render each player into their own viewport with their own camera.
+Classic Mario Kart / GoldenEye / Streetfighter layout.
+
+```python
+def draw():
+    py16.split_layout("horizontal")       # 2 viewports side-by-side
+    for p in range(2):
+        py16.viewport(p + 1)                # 1 = left, 2 = right
+        py16.camera(player_x[p] - 64,
+                    player_y[p] - 56)
+        draw_world()                         # tiles render inside viewport
+        draw_player(p)
+        # Per-viewport HUD - stays at top-left of viewport, not world:
+        wx, wy = py16.viewport_local(4, 4)
+        py16.text(f"P{p+1} {scores[p]}", wx, wy, 11)
+    py16.viewport(0)                        # full screen for shared overlay
+    draw_shared_hud_over_both_views()
+```
+
+Layouts:
+- `"full"` — single fullscreen viewport (default, like before)
+- `"horizontal"` — 2 viewports side-by-side (Mario Kart 2P)
+- `"vertical"` — 2 stacked viewports (split horizontally)
+- `"quad"` — 2x2 grid for 3-4 players (GoldenEye style)
+
+Each viewport keeps its own camera. Switching viewport saves and
+restores the camera automatically, so `for p in range(N): viewport(p+1);
+camera(...)` works as expected.
+
+`viewport(0)` is the special "no-clip" mode: the next draws will cover
+the whole screen. Use this for shared HUD elements on top of all
+viewports, divider lines between them, or end-of-game overlays.
+
+`viewport_local(x, y)` returns world coordinates that land at local
+position (x, y) of the active viewport regardless of where the camera
+is looking. Use it for per-viewport HUDs that stay attached to the
+viewport's corner while the player walks around.
+
+A 2-player exploration demo with coin collecting is in
+`examples/splitscreen_demo.py`. Combined with gamepad support, two
+people can play on the same TV with their own gamepads.
+
+### Scanlines (HDMA-style distortion)
+
+Post-process the finished frame by shifting each row horizontally, just
+like SNES HDMA used to. Classic use cases: water waves, heat shimmer,
+boss-aura lens distortion, CRT-style interlacing, Hadouken shockwaves.
+
+```python
+def draw():
+    py16.cls(13)                              # sky
+    draw_world()                              # will get distorted
+
+    # Apply wave distortion to everything below the horizon:
+    wave = py16.scanline_wave(time=frame,
+                              amplitude=5, frequency=0.2,
+                              y_start=128)
+    py16.scanline_apply(x_offsets=wave, wrap=True)
+
+    draw_hud()                                # drawn on top, stays straight
+```
+
+Built-in helpers each return a list of `HEIGHT` offsets, one per row:
+
+| Helper | Use case |
+|---|---|
+| `scanline_wave(time, ...)` | Water surface, ghost backgrounds, swaying flags |
+| `scanline_jitter(amplitude, seed)` | Heat shimmer, TV static, broken hologram |
+| `scanline_lens(center_y, ...)` | Boss aura, magic glow, fish-eye lens |
+| `scanline_interlace(odd, even)` | CRT-look, glitch effects, retro boot screens |
+| `scanline_pinch(time, ...)` | Breathing/pulsing whole-screen distortion |
+
+Each helper accepts `y_start` and `y_end` to limit the effect to a
+vertical region — apply waves only below the water line, lens only
+around the boss, etc.
+
+`scanline_apply(x_offsets, wrap=True)` makes wrapped rows: pixels that
+fall off one edge reappear on the other. With `wrap=False`, the gap
+gets filled with `fill_color` (default black).
+
+Difference from Mode-7 scanline effects: Mode 7's `scanline_offsets_x`
+distorts the perspective ground plane *while it renders*. The scanline
+system here distorts the **finished framebuffer** post-render, so it
+affects sprites, maps, and everything else you drew. Both systems can
+be combined.
+
+Performance: with numpy, ~485 FPS even with a wave applied every frame.
+Without numpy, ~120 FPS. Works on Pi 4 without slowdown.
+
+A live demo is in `examples/scanlines_demo.py`.
+
+### Particles (fire, smoke, sparks, explosions, confetti)
+
+Built-in particle system with physics (velocity, acceleration, drag),
+lifetime, color, size, and blending. 2000 simultaneous particles fit
+in the engine.
+
+```python
+# One-shot burst
+py16.burst_explosion(x, y, color=8)         # additive boom + flash
+py16.burst_sparks(x, y, color=10)           # gravity-affected
+py16.burst_smoke(x, y, color=5)             # rising, alpha-blended
+py16.burst_confetti(x, y, count=30)         # colourful, falling
+
+# Continuous emitter (fire, fountain, torch, smokestack)
+torch = py16.Emitter(
+    x=100, y=200,
+    rate=4,                      # particles per frame
+    life=30, life_var=0.3,
+    vy=-2.0, vy_var=0.4,
+    vx_var=0.5,
+    ay=-0.05,                    # tiny upward acceleration
+    color_list=[8, 9, 10],       # red, orange, yellow flicker
+    size=2,
+    blend="add")                 # additive glow
+
+def update():
+    torch.update()               # spawn new particles
+    py16.particles_update()      # physics for all live particles
+
+def draw():
+    py16.cls(0)
+    draw_world()
+    py16.particles_draw()        # render all particles
+    draw_hud()
+```
+
+A particle has position, velocity, acceleration, lifetime, color,
+size, blend mode, and drag. Hand-crafted bursts via `py16.particle()`
+or `py16.burst()` give full control; presets like `burst_explosion`
+cover common cases in one line.
+
+Performance: with numpy installed, 2000 particles run at 200+ FPS on
+desktop, 60+ FPS on a Pi 4. Without numpy, 500 particles are smooth.
+The engine groups particles by blend mode before drawing to minimise
+GPU state switches.
+
+A live showcase is in `examples/particles_demo.py` — fire, fountain,
+and on-demand bursts triggered by buttons.
+
+### Blending (color math)
+
+Like the SNES "Color Math" feature, py-16 supports four blending modes
+for stacking overlapping draws:
+
+```python
+py16.blend_mode("normal")                # default - draws stack normally
+py16.blend_mode("add")                   # additive - colors brighten
+py16.blend_mode("sub")                   # subtractive - colors darken
+py16.blend_mode("alpha", alpha=128)      # transparent (0..255)
+```
+
+Use cases:
+- **Additive:** plasma effects, magic spells, fire, glow around lights,
+  explosion bursts. Overlapping reds + greens + blues turn white.
+- **Subtractive:** shadows, eclipse, sunglasses tint. Removes color
+  from a bright background.
+- **Alpha:** ghost sprites, water surfaces, UI overlays, fade-ins.
+
+The blend mode is a global state that affects subsequent `rectfill`,
+`circfill`, `spr`, and `text` calls (outline ops and `cls` are
+unaffected). Switch back to `"normal"` before drawing UI text on top:
+
+```python
+def draw():
+    py16.cls(0)
+    draw_world()                          # normal
+    py16.blend_mode("add")
+    draw_light_sources()                  # glow effect
+    py16.blend_mode("normal")
+    draw_hud()                            # crisp UI
+```
+
+Pygame's hardware blending makes this fast — 3000+ FPS even with 40
+overlapping additive circles per frame. A live demo of all four modes
+is in `examples/blend_demo.py`.
+
 ### Multi-layer maps (SNES BG1-BG4 style)
 
 py-16 has 4 independent map layers, like the SNES had 4 background
@@ -546,13 +725,23 @@ F9 recompiles cart code at runtime and replaces `update`/`draw` -
 no program restart needed.
 
 **PDF editor (F7):** Live preview of the cover page with editable
-metadata. Edit title, author, cover style, four cover colors and font
-before saving as PDF. Three tabs:
+metadata. Edit title, author, cover style, colors, font, and text
+styling before saving as PDF. Three tabs:
 
 - **META** - title, author, cover style (sheet/map/screenshot/custom)
-- **STYLE** - 4 colors (background, title band, title text, author
-  text) + font (helvetica/courier/times/pixel)
+- **STYLE** - colors (background/title band/title text/author text),
+  font (helvetica/courier/times/pixel), plus per-text styling:
+  - Title: size (14-48pt), bold, italic, underline
+  - Author: size (8-24pt), bold, italic, underline
 - **IMAGE** - load custom PNG/JPG to embed as cover (max 200KB)
+
+Use **arrow keys** to navigate fields, **left/right** to cycle values,
+**Space** to toggle bool fields. **Q/W** switch tabs.
+
+Bold+Italic combinations work — each font family has all 4 variants
+(regular, bold, italic, bold-italic) plus an underline option drawn
+as a line under the text. So a title can be e.g. Times bold-italic
+underline at 38pt while the author below is Helvetica italic at 14pt.
 
 Ctrl+S saves both `.p16` and `.pdf` with the new metadata. Values
 persist in the cart (`meta` field), so they're restored next time.

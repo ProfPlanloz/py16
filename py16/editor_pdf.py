@@ -34,12 +34,16 @@ from .input import btn, btnp
 
 COVER_STYLES = ["sheet", "map", "screenshot", "custom"]
 FONTS = ["helvetica", "courier", "times", "pixel"]
+TITLE_SIZES  = [14, 18, 22, 26, 30, 34, 38, 42, 48]
+AUTHOR_SIZES = [8, 10, 12, 14, 16, 18, 20, 24]
 
-TABS = ["META", "STIL", "BILD"]
+TABS = ["META", "STYLE", "IMAGE"]
 
 FIELDS_META  = ["title", "author", "cover_style"]
 FIELDS_STYLE = ["color_bg", "color_band",
-                "color_title_text", "color_author_text", "font"]
+                "color_title_text", "color_author_text", "font",
+                "title_size", "title_bold", "title_italic", "title_underline",
+                "author_size", "author_bold", "author_italic", "author_underline"]
 FIELDS_IMAGE = ["custom_image_path"]
 
 MAX_IMAGE_BYTES = 200 * 1024
@@ -60,6 +64,16 @@ def _ensure_state():
         "pe_font":              "helvetica",
         "pe_custom_image":      None,
         "pe_custom_image_path": "",
+        # Title styling
+        "pe_title_size":        32,
+        "pe_title_bold":        True,
+        "pe_title_italic":      False,
+        "pe_title_underline":   False,
+        # Author styling
+        "pe_author_size":       10,
+        "pe_author_bold":       True,
+        "pe_author_italic":     False,
+        "pe_author_underline":  False,
 
         "pe_tab":               0,
         "pe_field":             0,
@@ -90,6 +104,15 @@ def _on_open():
     state.pe_font          = meta.get("font", "helvetica")
     state.pe_custom_image  = meta.get("custom_image", None)
     state.pe_custom_image_path = ""
+    # Text styling (backward-compat: default values if absent)
+    state.pe_title_size       = meta.get("title_size", 32)
+    state.pe_title_bold       = meta.get("title_bold", True)
+    state.pe_title_italic     = meta.get("title_italic", False)
+    state.pe_title_underline  = meta.get("title_underline", False)
+    state.pe_author_size      = meta.get("author_size", 10)
+    state.pe_author_bold      = meta.get("author_bold", True)
+    state.pe_author_italic    = meta.get("author_italic", False)
+    state.pe_author_underline = meta.get("author_underline", False)
     state.pe_initialized_for = cur_file
 
     if state.screen is not None:
@@ -110,6 +133,17 @@ def _current_tab_fields():
 
 def _just_pressed(key):
     return state.keys.get(key, False) and not state.keys_prev.get(key, False)
+
+def _nearest_index(sizes, value):
+    """Returns the index of the size closest to value (for cycling sizes)."""
+    best_i = 0
+    best_d = abs(sizes[0] - value)
+    for i, s in enumerate(sizes):
+        d = abs(s - value)
+        if d < best_d:
+            best_d = d
+            best_i = i
+    return best_i
 
 # ----------------------------------------------------------------------
 # UPDATE
@@ -181,6 +215,38 @@ def _handle_field_input(field, shift):
             setattr(state, attr, (cur - 16) % 256)
         elif _just_pressed(pygame.K_PAGEDOWN):
             setattr(state, attr, (cur + 16) % 256)
+        return
+
+    # Title/author size: cycle through preset sizes with left/right
+    if field == "title_size":
+        cur = state.pe_title_size
+        if btnp('left'):
+            sizes = TITLE_SIZES
+            idx = max(0, _nearest_index(sizes, cur) - 1)
+            state.pe_title_size = sizes[idx]
+        elif btnp('right'):
+            sizes = TITLE_SIZES
+            idx = min(len(sizes) - 1, _nearest_index(sizes, cur) + 1)
+            state.pe_title_size = sizes[idx]
+        return
+    if field == "author_size":
+        cur = state.pe_author_size
+        if btnp('left'):
+            sizes = AUTHOR_SIZES
+            idx = max(0, _nearest_index(sizes, cur) - 1)
+            state.pe_author_size = sizes[idx]
+        elif btnp('right'):
+            sizes = AUTHOR_SIZES
+            idx = min(len(sizes) - 1, _nearest_index(sizes, cur) + 1)
+            state.pe_author_size = sizes[idx]
+        return
+
+    # Boolean toggles for bold/italic/underline
+    if field in ("title_bold", "title_italic", "title_underline",
+                 "author_bold", "author_italic", "author_underline"):
+        attr = "pe_" + field
+        if btnp('left') or btnp('right') or _just_pressed(pygame.K_SPACE):
+            setattr(state, attr, not getattr(state, attr))
         return
 
     if field in ("title", "author", "custom_image_path"):
@@ -268,6 +334,14 @@ def _save_with_meta():
         "color_author_text": state.pe_color_author_text,
         "font":              state.pe_font,
         "custom_image":      state.pe_custom_image,
+        "title_size":        state.pe_title_size,
+        "title_bold":        state.pe_title_bold,
+        "title_italic":      state.pe_title_italic,
+        "title_underline":   state.pe_title_underline,
+        "author_size":       state.pe_author_size,
+        "author_bold":       state.pe_author_bold,
+        "author_italic":     state.pe_author_italic,
+        "author_underline":  state.pe_author_underline,
     }
     from . import core, cart, cart_pdf
     p16_path = core._derive_cart_save_path(".p16")
@@ -352,22 +426,115 @@ def _draw_style_fields(x, y, w, h):
     rect(x - 2, y - 2, w + 4, h + 4, 5)
     text("COLORS & FONT", x, y, 11)
 
-    color_fields = [
-        ("BACKGROUND",  "pe_color_bg",          0),
-        ("TITLE BAND",   "pe_color_band",        1),
-        ("TITLE TEXT",   "pe_color_title_text",  2),
-        ("AUTHOR TEXT",   "pe_color_author_text", 3),
-    ]
-    for label, attr, idx in color_fields:
-        fy = y + 10 + idx * 22
-        cur = getattr(state, attr)
-        active = (state.pe_field == idx)
-        _draw_color_field(x, fy, w, label, cur, active)
+    # Two-column layout: left column = colors+font+title styles
+    #                    right column = author styles
+    # The fields are ordered in FIELDS_STYLE the same way, but we draw
+    # them in two columns to fit them all.
+    fields = FIELDS_STYLE
+    row_h = 14
+    list_start_y = y + 10
 
-    fy = y + 10 + 4 * 22
-    _draw_select_field(x, fy, w, "FONT",
-                       state.pe_font, FONTS,
-                       state.pe_field == 4)
+    # Column split: first 9 fields (colors, font, title styles) on the left,
+    # last 4 (author styles) on the right.
+    # Wait, that's uneven (9 vs 4). Better:
+    #   Left:  4 colors + font = 5 fields
+    #   Right: title (4 fields) + author (4 fields) = 8 fields - too many.
+    # Compromise: left = colors + font (5), right = title+author styles (8).
+    # 8 * 14 = 112, fits in 124px panel height.
+    # Asymmetric columns: left wider (color labels), right narrower (style toggles)
+    LEFT_COUNT = 5
+    col_w_left  = (w * 60) // 100
+    col_w_right = (w * 40) // 100 - 4
+    gap = 4
+
+    for i, fname in enumerate(fields):
+        if i < LEFT_COUNT:
+            fx = x
+            fy = list_start_y + i * row_h
+            col_w = col_w_left
+        else:
+            fx = x + col_w_left + gap
+            fy = list_start_y + (i - LEFT_COUNT) * row_h
+            col_w = col_w_right
+
+        active = (state.pe_field == i)
+
+        if fname.startswith("color_"):
+            label = {
+                "color_bg":          "BACKGROUND",
+                "color_band":        "TITLE BAND",
+                "color_title_text":  "TITLE TEXT",
+                "color_author_text": "AUTHOR TEXT",
+            }[fname]
+            cur = getattr(state, "pe_" + fname)
+            _draw_color_field_compact(fx, fy, col_w, label, cur, active)
+        elif fname == "font":
+            _draw_select_field_compact(fx, fy, col_w, "FONT",
+                                       state.pe_font, FONTS, active)
+        elif fname == "title_size":
+            _draw_size_field(fx, fy, col_w, "T.SIZE",
+                             state.pe_title_size, active)
+        elif fname == "author_size":
+            _draw_size_field(fx, fy, col_w, "A.SIZE",
+                             state.pe_author_size, active)
+        elif fname in ("title_bold", "title_italic", "title_underline",
+                       "author_bold", "author_italic", "author_underline"):
+            label = {
+                "title_bold":       "T.BOLD",
+                "title_italic":     "T.ITALIC",
+                "title_underline":  "T.UNDER",
+                "author_bold":      "A.BOLD",
+                "author_italic":    "A.ITALIC",
+                "author_underline": "A.UNDER",
+            }[fname]
+            cur = getattr(state, "pe_" + fname)
+            _draw_bool_field(fx, fy, col_w, label, cur, active)
+
+def _draw_color_field_compact(x, y, w, label, color_idx, active):
+    """Compact (one-line) color field for the style tab."""
+    bg_color = 13 if active else 0
+    rectfill(x, y, w, 11, bg_color)
+    # Truncate label if needed to fit narrower column
+    max_label = max(2, (w - 36) // 4)
+    text(label[:max_label], x + 2, y + 2, 7 if active else 6)
+
+    swatch_x = x + w - 28
+    rectfill(swatch_x, y + 2, 10, 7, color_idx)
+    rect(swatch_x, y + 2, 10, 7, 7 if active else 5)
+
+    if active:
+        text("<>", x + w - 12, y + 2, 7)
+
+def _draw_select_field_compact(x, y, w, label, value, options, active):
+    """Compact one-line select field."""
+    bg_color = 13 if active else 0
+    rectfill(x, y, w, 11, bg_color)
+    max_label = max(2, (w - 50) // 4)
+    text(label[:max_label], x + 2, y + 2, 7 if active else 6)
+    val_str = str(value).upper()
+    text(val_str[:10], x + w - 44, y + 2, 11 if active else 7)
+    if active:
+        text("<>", x + w - 12, y + 2, 7)
+
+def _draw_size_field(x, y, w, label, size, active):
+    """Compact one-line numeric size field."""
+    bg_color = 13 if active else 0
+    rectfill(x, y, w, 11, bg_color)
+    max_label = max(2, (w - 36) // 4)
+    text(label[:max_label], x + 2, y + 2, 7 if active else 6)
+    text(f"{size}", x + w - 24, y + 2, 11 if active else 7)
+    if active:
+        text("<>", x + w - 12, y + 2, 7)
+
+def _draw_bool_field(x, y, w, label, value, active):
+    """Compact one-line on/off toggle."""
+    bg_color = 13 if active else 0
+    rectfill(x, y, w, 11, bg_color)
+    max_label = max(2, (w - 16) // 4)
+    text(label[:max_label], x + 2, y + 2, 7 if active else 6)
+    marker = "X" if value else "."
+    marker_color = 11 if value else 5
+    text(marker, x + w - 8, y + 2, marker_color)
 
 def _draw_color_field(x, y, w, label, color_idx, active):
     text(label, x, y, 6)
