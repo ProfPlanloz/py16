@@ -323,6 +323,21 @@ def _load_custom_image():
 # SAVE
 # ----------------------------------------------------------------------
 
+def _slugify_for_filename(title):
+    """Convert a cart title to a safe filename slug.
+    'Tux Adventure!' -> 'tux_adventure'
+    """
+    import re
+    if not title:
+        return "untitled"
+    # Lowercase, replace whitespace with underscore, drop unsafe chars
+    s = title.lower().strip()
+    s = re.sub(r"\s+", "_", s)
+    s = re.sub(r"[^a-z0-9_\-]", "", s)
+    s = s.strip("_-")
+    return s or "untitled"
+
+
 def _save_with_meta():
     state.cart_meta = {
         "title":             state.pe_title,
@@ -343,9 +358,47 @@ def _save_with_meta():
         "author_italic":     state.pe_author_italic,
         "author_underline":  state.pe_author_underline,
     }
-    from . import core, cart, cart_pdf
-    p16_path = core._derive_cart_save_path(".p16")
-    pdf_path = core._derive_cart_save_path(".pdf")
+    from . import core, cart, cart_pdf, code_editor, config as _cfg
+
+    # Safety: if the user is saving a PDF without any code in the cart
+    # yet, decide how to handle the empty state. There are two cases:
+    #   1) Fresh blank cart, no real source file -> seed with template so
+    #      the resulting PDF is at least openable when shared.
+    #   2) A real .py source IS attached but cart_code stayed empty
+    #      (the .py forgot to call py16.set_code_file(__file__) and the
+    #      engine's auto-detect didn't catch it). Don't overwrite the
+    #      empty state with the template - that would silently replace
+    #      the user's real code in the PDF. Warn loudly instead.
+    if not (getattr(state, "cart_code", "") or "").strip():
+        code_file = getattr(state, "cart_code_file", None) or ""
+        has_real_source = (code_file.endswith(".py")
+                           and os.path.exists(code_file))
+        if has_real_source:
+            _set_status("WARN: source .py exists but cart_code is empty - "
+                        "add py16.set_code_file(__file__) to init()", 8)
+        else:
+            state.cart_code = code_editor.DEFAULT_CART_TEMPLATE
+            code_editor._ensure_state()
+            if hasattr(state, "ce_lines"):
+                state.ce_lines = code_editor._text_to_lines(state.cart_code)
+            _set_status("NOTE: empty cart - added default template", 10)
+
+    # Filename derivation: prefer the cart title (so 'Tux Adventure' becomes
+    # 'tux_adventure.pdf'), fall back to cart_code_file's basename, fall back
+    # to "untitled".
+    title_slug = _slugify_for_filename(state.pe_title)
+    if title_slug and title_slug != "untitled":
+        # Use the title-derived name in the carts directory
+        carts_dir = _cfg.carts_dir()
+        p16_path = os.path.join(carts_dir, title_slug + ".p16")
+        pdf_path = os.path.join(carts_dir, title_slug + ".pdf")
+        # Update cart_code_file so subsequent saves stay consistent
+        state.cart_code_file = os.path.join(carts_dir, title_slug + ".py")
+    else:
+        # Fall back to the existing path-derivation logic (uses code_file
+        # or "untitled" inside carts_dir)
+        p16_path = core._derive_cart_save_path(".p16")
+        pdf_path = core._derive_cart_save_path(".pdf")
 
     cart.save_cart(p16_path)
     try:

@@ -2,7 +2,7 @@
 py16.mathx
 ==========
 Mathe-Helfer und Engine-Helfer (Frame-Counter, FPS).
-'mathx' weil 'math' bereits Standardbibliothek ist.
+'mathx' weil 'math' bereits Standardbibliothek .
 """
 
 import math
@@ -25,5 +25,5 @@ def t():
     return state.frame_count
 
 def fps():
-    """Aktuelle FPS (Mittel ueber die letzten Frames)."""
+    """Current FPS (Mittel ueber die letzten Frames)."""
     return state.clock.get_fps() if state.clock else 0

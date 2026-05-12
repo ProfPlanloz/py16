@@ -136,7 +136,7 @@ def cover_to_palette_indices(pdf_path, cell_w, cell_h):
         pal_arr = np.array(PALETTE, dtype=np.int32)      # (256, 3)
         diff = arr[..., None, :] - pal_arr[None, None, :, :]
         dist = (diff * diff).sum(-1)
-        idx = d.argmin(-1)                            # (H, W)
+        idx = dist.argmin(-1)                            # (H, W)
         return idx.tolist()
     except ImportError:
         # Fallback without numpy: pixel-by-pixel

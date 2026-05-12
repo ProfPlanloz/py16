@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "py-16"
-version = "1.0.0"
+version = "1.1.1"
 description = "A 16-bit-era fantasy console with built-in editors and PDF carts"
 readme = "README.md"
 license = {file = "LICENSE"}

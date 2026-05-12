@@ -1,14 +1,14 @@
 """
 py16.config
 ===========
-Liest und schreibt ~/.py16/config.json.
+Reads and writes ~/.py16/config.json.
 
-Inhalt:
-  carts_dir       - Pfad, in dem .p16/.pdf-Carts liegen
-  boot_cart       - relativer Pfad zum Auto-Boot-Cart (oder None)
-  power_off_cmd   - Shell-Kommando fuer Power-Off (Linux)
-  reboot_cmd      - Shell-Kommando fuer Reboot
-  boot_countdown  - Sekunden bis Auto-Boot (Default 3)
+Contents:
+  carts_dir       - Path containing .p16/.pdf carts
+  boot_cart       - relative path to auto-boot cart (or None)
+  power_off_cmd   - Shell command for power-off (Linux)
+  reboot_cmd      - Shell command for reboot
+  boot_countdown  - Seconds until auto-boot (default 3)
 """
 
 import os
@@ -16,13 +16,13 @@ import json
 
 DEFAULT_CONFIG = {
     "carts_dir":      "~/.py16/carts",
-    "boot_cart":      "boot.p16",        # relativ zu carts_dir
+    "boot_cart":      "boot.p16",        # relative to carts_dir
     "power_off_cmd":  "sudo poweroff",
     "reboot_cmd":     "sudo reboot",
     "boot_countdown": 3,
-    "fullscreen":     False,             # Bei True: SDL-Vollbild
-    "display_scale":  "auto",            # "auto" oder ganzzahliger Faktor
-    "hide_cursor":    "auto",            # "auto" (im Vollbild aus), True/False
+    "fullscreen":     False,             # If True: SDL fullscreen
+    "display_scale":  "auto",            # "auto" or integer factor
+    "hide_cursor":    "auto",            # "auto" (off in fullscreen), True/False
 }
 
 CONFIG_DIR  = os.path.expanduser("~/.py16")
@@ -31,12 +31,12 @@ CONFIG_PATH = os.path.join(CONFIG_DIR, "config.json")
 _loaded_config = None
 
 def get_config():
-    """Liefert das aktuelle Config-Dict. Laedt es einmal lazy."""
+    """Returns the current config dict. Loaded lazily."""
     global _loaded_config
     if _loaded_config is not None:
         return _loaded_config
 
-    # Override per Umgebungsvariable
+    # Override via environment variable
     cfg = dict(DEFAULT_CONFIG)
     if os.path.exists(CONFIG_PATH):
         try:
@@ -44,9 +44,9 @@ def get_config():
                 user_cfg = json.load(f)
             cfg.update(user_cfg)
         except Exception as e:
-            print(f"Config-Lesefehler ({CONFIG_PATH}): {e}")
+            print(f"Config read error ({CONFIG_PATH}): {e}")
     else:
-        # Erststart: Default-Config schreiben
+        # First run: write default config
         try:
             os.makedirs(CONFIG_DIR, exist_ok=True)
             with open(CONFIG_PATH, "w") as f:
@@ -54,15 +54,15 @@ def get_config():
         except Exception:
             pass
 
-    # Umgebungsvariable hat Vorrang
+    # Environment variable takes precedence
     env_dir = os.environ.get("PY16_CARTS_DIR")
     if env_dir:
         cfg["carts_dir"] = env_dir
 
-    # Pfade expandieren
+    # Expand paths
     cfg["carts_dir"] = os.path.expanduser(cfg["carts_dir"])
 
-    # Cart-Verzeichnis sicherstellen
+    # Ensure cart directory exists
     try:
         os.makedirs(cfg["carts_dir"], exist_ok=True)
     except Exception:
@@ -75,7 +75,7 @@ def carts_dir():
     return get_config()["carts_dir"]
 
 def boot_cart_path():
-    """Voller Pfad zum Boot-Cart, oder None wenn nicht vorhanden."""
+    """Full path to boot cart, or None if not present."""
     cfg = get_config()
     if not cfg.get("boot_cart"):
         return None
@@ -83,7 +83,7 @@ def boot_cart_path():
     return p if os.path.exists(p) else None
 
 def list_carts():
-    """Listet alle .p16/.pdf-Dateien im Cart-Verzeichnis."""
+    """Lists all .p16/.pdf files in the cart directory."""
     d = carts_dir()
     if not os.path.isdir(d):
         return []
@@ -97,6 +97,6 @@ def list_carts():
     return files
 
 def reload_config():
-    """Setzt den Config-Cache zurueck. Falls die Datei extern geaendert wurde."""
+    """Resets the config cache. In case the file was changed externally."""
     global _loaded_config
     _loaded_config = None

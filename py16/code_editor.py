@@ -59,6 +59,27 @@ def _visible_cols():
 # STATE INIT
 # ----------------------------------------------------------------------
 
+DEFAULT_CART_TEMPLATE = '''\
+# @manual
+# @description
+# A new py-16 cart. Edit this code, then save with F5.
+# Open the PDF/Sprite/Map editors with F7/F1/F2.
+# @end
+
+import py16
+
+def init():
+    pass
+
+def update():
+    pass
+
+def draw():
+    py16.cls(1)
+    py16.text("HELLO, PY-16!", 80, 100, 7)
+'''
+
+
 def _ensure_state():
     """Initialisiert Editor-State falls noch nicht vorhanden.
     Pruefe jedes Feld einzeln, damit es robust bleibt auch wenn
@@ -92,6 +113,14 @@ def _ensure_state():
                 setattr(state, key, list(default_val))
             else:
                 setattr(state, key, default_val)
+
+    # If editor is opened with no code at all and the ce_lines is empty,
+    # seed the template so users have something to start from instead of
+    # an empty buffer that produces invalid carts.
+    if (not state.cart_code) and (
+        state.ce_lines == [""] or not state.ce_lines):
+        state.cart_code = DEFAULT_CART_TEMPLATE
+        state.ce_lines = _text_to_lines(DEFAULT_CART_TEMPLATE)
 
 # ----------------------------------------------------------------------
 # TEXT-HELFER
@@ -353,7 +382,7 @@ def save_external_file():
         # Fallback: in cart_code im Speicher schreiben
         state.cart_code = _lines_to_text(state.ce_lines)
         state.ce_dirty = False
-        _set_status("IM CART SAVED", 11)
+        _set_status("SAVED IN CART", 11)
         return
     try:
         os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
@@ -363,7 +392,7 @@ def save_external_file():
         state.ce_dirty = False
         _set_status(f"SAVED: {os.path.basename(path)}", 11)
     except Exception as e:
-        _set_status(f"SAVE-FEHLER: {e}", 8)
+        _set_status(f"SAVE ERROR: {e}", 8)
 
 # ----------------------------------------------------------------------
 # CODE AUSFUEHREN (F9 Reload)
@@ -381,7 +410,7 @@ def execute_code():
     try:
         compiled = compile(code_text, state.cart_code_file or "<cart>", "exec")
     except SyntaxError as e:
-        return False, f"SYNTAX FEHLER ZEILE {e.lineno}: {e.msg}"
+        return False, f"SYNTAX ERROR LINE {e.lineno}: {e.msg}"
 
     # Globals for cart code: expose entire py16 API
     import py16
@@ -399,7 +428,7 @@ def execute_code():
     except Exception as e:
         import traceback
         tb = traceback.format_exc(limit=3)
-        return False, f"LAUFZEITFEHLER:\n{tb.split(chr(10))[-2]}"
+        return False, f"RUNTIME ERROR:\n{tb.split(chr(10))[-2]}"
 
     # update/draw/init aus Cart extrahieren
     update_fn = cart_globals.get("update")
@@ -407,7 +436,7 @@ def execute_code():
     init_fn   = cart_globals.get("init")
 
     if not callable(update_fn) or not callable(draw_fn):
-        return False, "CART BRAUCHT update() UND draw() FUNKTIONEN"
+        return False, "CART NEEDS update() AND draw() FUNCTIONS"
 
     state.cart_update_fn = update_fn
     state.cart_draw_fn = draw_fn
@@ -419,7 +448,7 @@ def execute_code():
         except Exception as e:
             import traceback
             tb = traceback.format_exc(limit=3)
-            return False, f"INIT-FEHLER:\n{tb.split(chr(10))[-2]}"
+            return False, f"INIT ERROR:\n{tb.split(chr(10))[-2]}"
 
     return True, "RELOAD OK"
 

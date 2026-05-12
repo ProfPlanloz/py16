@@ -4,6 +4,7 @@ py16.core
 Constants, palette, initialization and the main loop `run()`.
 """
 
+import os
 import sys
 import pygame
 
@@ -326,6 +327,25 @@ def run(update_func=None, draw_func=None, init_func=None):
     """main loop.
     If update_func and draw_func are None, BIOS starts.
     Otherwise the given cart runs."""
+    # Auto-detect the caller's source file if cart_code_file isn't set.
+    # This lets a standalone .py cart be exported as PDF (with full code
+    # listing and @manual block) without an explicit set_code_file() call
+    # in its init(). Carts that DO call set_code_file themselves still
+    # take precedence, since their cart_code_file is already set.
+    if not getattr(state, "cart_code_file", None):
+        try:
+            import inspect
+            caller_frame = inspect.stack()[1]
+            caller_file = caller_frame.filename
+            if (caller_file
+                    and caller_file.endswith(".py")
+                    and os.path.exists(caller_file)):
+                from . import set_code_file as _set_code_file
+                _set_code_file(caller_file)
+        except Exception:
+            # Auto-detect is best-effort; never block startup over it.
+            pass
+
     # Lazy imports to avoid circular dependencies
     from . import editors, cart, tracker, bios, cart_runtime, config
 

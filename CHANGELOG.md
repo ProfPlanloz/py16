@@ -5,9 +5,9 @@ All notable changes to py-16 are documented in this file.
 Format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/).
 
-## [1.0.0] - 2026
+## [1.1.0] - 2026
 
-First public release.
+second public release.
 
 ### Added
 

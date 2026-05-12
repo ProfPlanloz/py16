@@ -710,7 +710,7 @@ def _draw_code_listing(c, w, h, title, code_text):
 # ----------------------------------------------------------------------
 
 def load_pdf(filename):
-    """Reads einen PDF-Cart und extrahiert das embedded .p16-Cart."""
+    """Read a py-16 PDF cart and extract the embedded .p16 attachment."""
     if not _HAS_PYPDF:
         print("PDF loading needs: pypdf (pip install pypdf)")
         return False
@@ -721,9 +721,11 @@ def load_pdf(filename):
     reader = PdfReader(filename)
     attachments = reader.attachments
     if not attachments:
-        print(f"PDF '{filename}' contains no cart attachment")
+        print(f"'{os.path.basename(filename)}' is a regular PDF "
+              f"(no py-16 cart embedded)")
         return False
 
+    # Look for cart.p16 specifically (or any .p16-named attachment)
     cart_data = None
     for name, content_list in attachments.items():
         if name.lower().endswith(".p16") or name.lower() == "cart.p16":
@@ -731,12 +733,37 @@ def load_pdf(filename):
             break
 
     if cart_data is None:
-        # Fallback: ersten attachment nehmen
-        first_name = next(iter(attachments))
-        first_data = attachments[first_name]
-        cart_data = first_data[0] if isinstance(first_data, list) else first_data
+        # No .p16 attachment - this is probably a regular PDF that
+        # happens to have unrelated attachments (e.g. preview images).
+        # Don't try to load arbitrary content as a cart.
+        print(f"'{os.path.basename(filename)}' has attachments but none "
+              f"named *.p16 (probably not a py-16 cart)")
+        return False
 
-    # Temporaer schreiben und ueber save_cart-Loader einlesen
+    # Verify the attachment looks like a py-16 cart (JSON starting with '{')
+    if not cart_data or not cart_data.lstrip().startswith(b"{"):
+        print(f"'{os.path.basename(filename)}' has a .p16 attachment but "
+              f"its content is not valid py-16 cart JSON")
+        return False
+
+    # Inspect the cart JSON for an empty code field, since that's a
+    # common failure mode (PDF saved before any code was written).
+    try:
+        import json as _json
+        cart_json = _json.loads(cart_data)
+        code_text = cart_json.get("code", "")
+        if not code_text or not code_text.strip():
+            print(f"'{os.path.basename(filename)}' is a py-16 cart but "
+                  f"has no code (empty cart - open in F6 editor to write some)")
+            # Still load it so the user lands in a usable state, but
+            # leave the cart_code empty so the runtime can show a clear
+            # 'empty cart' message instead of fishing for update/draw.
+    except Exception:
+        # JSON parse failed - fall through, load_cart will report the
+        # real error.
+        pass
+
+    # Write temporarily and load via the .p16 loader
     tmp_path = "/tmp/_p16_pdf_load.p16"
     with open(tmp_path, "wb") as f:
         f.write(cart_data)
