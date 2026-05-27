@@ -1,14 +1,14 @@
-# win0_7 Plugin App Cheatsheet for AI Assistants
+# py16os Plugin App Cheatsheet for AI Assistants
 
 > **Use this as a system prompt when asking an AI to write a plugin app for
-> the win0_7 desktop cart.** The host cart already runs on py-16 and provides
+> the py16os desktop cart.** The host cart already runs on py-16 and provides
 > the window manager, taskbar, drag/drop, theme, and language system.
 > Your plugin only fills the **inside** of a window.
 
 ## What a plugin is
 
 A plugin is a single `.py` file dropped into the `apps/` folder next to
-`win0_7.py`. On startup the cart scans `apps/`, loads each plugin, gives it a
+`py16os.py`. On startup the cart scans `apps/`, loads each plugin, gives it a
 window, and adds a desktop icon. Reload without restart with the terminal
 command `RELOAD`.
 
