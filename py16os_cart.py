@@ -56,6 +56,7 @@ import ast
 import sys
 import operator
 import importlib.util
+import unicodedata
 import pygame
 
 # --- KONFIGURATION & GLOBALS ---
@@ -82,11 +83,51 @@ prev_mx, prev_my = -1, -1  # Für nahtlosen Maus/Gamepad-Wechsel
 
 CONFIG_FILE = "theme.json"
 
+# --- HINTERGRUNDBILD (Wallpaper) ---
+# .p16canvas = 256x224-Vollbild (1 Palettenindex je Pixel als Hex), z.B. im
+# Animator-16 gemalt. Lege .p16canvas-Dateien in den Ordner "wallpapers/"
+# (oder ins Arbeitsverzeichnis) und waehle sie in der THEME-App als
+# Hintergrund aus. Format-Header: "# P16CANVAS 256x224 v2" (2 Hex/Pixel) bzw.
+# v1 (1 Hex/Pixel, nur Farben 0..15).
+WALLPAPER_DIR = "wallpapers"
+CANVAS_BG_W, CANVAS_BG_H = 256, 224
+current_wallpaper = None         # absoluter Pfad zur aktiven .p16canvas oder None
+_available_wallpapers = []       # [{"name": "NONE", "path": None}, {"name": ..., "path": ...}]
+_canvas_cache = {}               # abspath -> Pixel-Liste (57344) oder None bei Fehler
+_wallpaper_runs = None           # vorgerechnete Zeilen-Runs [(x, y, w, color), ...]
+
 # --- LOKALISIERUNG ---
 LANG_DIR = "lang"
 current_language = "en"
 _translations = {}              # key -> uebersetzter String (leer = englisch)
 _available_languages = []       # [{"code": "de", "name": "Deutsch"}]
+
+# Der py-16-Font kennt nur ASCII; Sonderzeichen wuerden als '?' erscheinen.
+# Diese Tabelle bildet gaengige europaeische Buchstaben auf ASCII ab.
+_TRANSLIT = {
+    "Ä": "AE", "Ö": "OE", "Ü": "UE", "ä": "ae", "ö": "oe", "ü": "ue", "ß": "SS",
+    "Ø": "OE", "ø": "oe", "Æ": "AE", "æ": "ae", "Å": "AA", "å": "aa",
+    "Þ": "TH", "þ": "th", "Ð": "D", "ð": "d", "Œ": "OE", "œ": "oe",
+    "Ł": "L", "ł": "l", "¿": "?", "¡": "!", "€": "EUR", "£": "GBP",
+}
+
+def _ascii_safe(s):
+    """Ersetzt Nicht-ASCII-Zeichen durch ASCII-Annaeherungen, damit der
+    py-16-Font sie darstellen kann (sonst erscheinen '?'). Akzente werden
+    abgetrennt (é -> e), Sonderbuchstaben ueber _TRANSLIT umgesetzt."""
+    if not isinstance(s, str):
+        s = str(s)
+    out = []
+    for ch in s:
+        if ord(ch) < 128:
+            out.append(ch)
+        elif ch in _TRANSLIT:
+            out.append(_TRANSLIT[ch])
+        else:
+            dec = unicodedata.normalize("NFKD", ch)
+            stripped = "".join(c for c in dec if ord(c) < 128 and not unicodedata.combining(c))
+            out.append(stripped if stripped else "?")
+    return "".join(out)
 
 _EXAMPLE_LANG_DE = {
     "_name": "Deutsch",
@@ -106,6 +147,7 @@ _EXAMPLE_LANG_DE = {
     "TEXT:": "TEXT:",
     "CURSOR:": "CURSOR:",
     "LANGUAGE:": "SPRACHE:",
+    "BACKGROUND:": "HINTERGRUNDBILD:",
 }
 
 def tr(key):
@@ -131,7 +173,7 @@ def discover_languages():
                 with open(os.path.join(LANG_DIR, fn)) as f:
                     data = json.load(f)
                 name = data.get("_name", code.upper())
-                _available_languages.append({"code": code, "name": str(name)})
+                _available_languages.append({"code": code, "name": _ascii_safe(str(name))})
             except Exception:
                 pass
     except Exception:
@@ -152,7 +194,7 @@ def load_language(code):
     try:
         with open(path) as f:
             data = json.load(f)
-        _translations = {k: str(v) for k, v in data.items() if k != "_name"}
+        _translations = {k: _ascii_safe(str(v)) for k, v in data.items() if k != "_name"}
         return True
     except Exception:
         current_language = "en"
@@ -166,7 +208,7 @@ def context_label(opt):
     return tr(opt)
 
 def load_theme():
-    global desktop_color, sys_text_color, cursor_color, crt_effect, desktop_icons, known_plugins, current_language
+    global desktop_color, sys_text_color, cursor_color, crt_effect, desktop_icons, known_plugins, current_language, current_wallpaper
     if os.path.exists(CONFIG_FILE):
         try:
             with open(CONFIG_FILE, "r") as f:
@@ -181,13 +223,16 @@ def load_theme():
                     known_plugins = list(data["known_plugins"])
                 if "language" in data:
                     current_language = data["language"]
+                wp = data.get("wallpaper", "")
+                current_wallpaper = wp if wp and os.path.isfile(wp) else None
         except Exception: pass
 
 def save_theme():
     data = {"desktop_color": desktop_color, "sys_text_color": sys_text_color,
             "cursor_color": cursor_color, "crt_effect": crt_effect,
             "desktop_icons": desktop_icons, "known_plugins": known_plugins,
-            "language": current_language}
+            "language": current_language,
+            "wallpaper": current_wallpaper or ""}
     try:
         with open(CONFIG_FILE, "w") as f: json.dump(data, f)
     except Exception: pass
@@ -197,7 +242,7 @@ windows = [
     {"id": "notepad", "title": "NOTES.PY16", "x": 20, "y": 20, "w": 140, "h": 130, "visible": False, "minimized": False, "resizable": True, "min_w": 136, "min_h": 120, "lines": [""], "pressed_key": None, "filename": None, "scroll": 0},
     {"id": "files", "title": "FILES.PY16", "x": 35, "y": 30, "w": 160, "h": 130, "visible": False, "minimized": False, "resizable": True, "min_w": 120, "min_h": 90,
      "scroll": 0, "selected": "", "items": [], "current_dir": ".", "is_sel_dir": False, "menu_open": False, "menu_x": 0, "menu_y": 0, "moving_file": None},
-    {"id": "colors", "title": "THEME.PY16", "x": 60, "y": 60, "w": 116, "h": 156, "visible": False, "minimized": False, "resizable": False},
+    {"id": "colors", "title": "THEME.PY16", "x": 60, "y": 16, "w": 116, "h": 184, "visible": False, "minimized": False, "resizable": False},
     {"id": "calc", "title": "CALC.PY16", "x": 150, "y": 40, "w": 88, "h": 110, "visible": False, "minimized": False, "resizable": False,
      "disp": "0", "val": 0, "op": None, "new_num": True, "pressed_btn": -1},
     {"id": "paint", "title": "PAINT.PY16", "x": 10, "y": 80, "w": 100, "h": 88, "visible": False, "minimized": False, "resizable": False, "canvas": [7]*1024, "color": 0},
@@ -820,6 +865,116 @@ def next_image_filename(directory):
             return cand
     return os.path.join(directory, "img_overflow.p16img")
 
+# -- HINTERGRUNDBILD-HELFER --------------------------------------------------
+def load_p16canvas(path):
+    """Laedt eine .p16canvas (256x224) und liefert eine 57344-elementige
+    Palettenindex-Liste; bei Fehler None. Erkennt v2 (2 Hex/Pixel) und
+    v1 (1 Hex/Pixel). Ergebnis wird gecacht."""
+    if not path:
+        return None
+    key = os.path.abspath(path)
+    if key in _canvas_cache:
+        return _canvas_cache[key]
+    W, H = CANVAS_BG_W, CANVAS_BG_H
+    try:
+        with open(path, "r") as f:
+            lines = f.readlines()
+        px = [0] * (W * H)
+        y = 0
+        for line in lines:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if y >= H:
+                break
+            if len(line) == W * 2:                       # v2: 2 Hex pro Pixel
+                row = [int(line[i:i+2], 16) for i in range(0, W * 2, 2)]
+            elif len(line) == W:                         # v1: 1 Hex pro Pixel
+                row = [int(c, 16) for c in line]
+            else:
+                continue
+            px[y*W:(y+1)*W] = row
+            y += 1
+        if y == 0:
+            _canvas_cache[key] = None
+            return None
+        _canvas_cache[key] = px
+        return px
+    except Exception:
+        _canvas_cache[key] = None
+        return None
+
+def discover_wallpapers():
+    """Baut _available_wallpapers: 'NONE' (Vollfarbe) + alle .p16canvas aus
+    dem Ordner wallpapers/ und dem Arbeitsverzeichnis (dedupliziert)."""
+    global _available_wallpapers
+    found = [{"name": "NONE", "path": None}]
+    seen = set()
+    try:
+        os.makedirs(WALLPAPER_DIR, exist_ok=True)
+    except Exception:
+        pass
+    for directory in (WALLPAPER_DIR, "."):
+        try:
+            for fn in sorted(os.listdir(directory)):
+                if not fn.lower().endswith(".p16canvas"):
+                    continue
+                ap = os.path.abspath(os.path.join(directory, fn))
+                if ap in seen:
+                    continue
+                seen.add(ap)
+                name = _ascii_safe(os.path.splitext(fn)[0]).upper()[:14]
+                found.append({"name": name, "path": ap})
+        except Exception:
+            pass
+    _available_wallpapers = found
+
+def _bake_wallpaper():
+    """Rechnet das aktuelle Hintergrundbild einmalig in Zeilen-Runs um, damit
+    es pro Frame mit wenigen rectfill-Aufrufen gezeichnet werden kann."""
+    global _wallpaper_runs
+    _wallpaper_runs = None
+    if not current_wallpaper:
+        return
+    px = load_p16canvas(current_wallpaper)
+    if not px:
+        return
+    W, H = CANVAS_BG_W, CANVAS_BG_H
+    runs = []
+    for y in range(H):
+        base = y * W
+        x = 0
+        while x < W:
+            c = px[base + x]
+            x2 = x + 1
+            while x2 < W and px[base + x2] == c:
+                x2 += 1
+            runs.append((x, y, x2 - x, c))
+            x = x2
+    _wallpaper_runs = runs
+
+def set_wallpaper(path):
+    """Setzt das Hintergrundbild (Pfad oder None), bereitet es auf und
+    speichert die Auswahl in theme.json."""
+    global current_wallpaper
+    current_wallpaper = os.path.abspath(path) if path else None
+    _bake_wallpaper()
+    save_theme()
+
+def _cycle_wallpaper(direction):
+    """Wechselt zum naechsten/vorigen Eintrag in _available_wallpapers."""
+    discover_wallpapers()
+    if len(_available_wallpapers) <= 1:
+        py16.tone(150, 20, py16.WAVE_SAW)
+        return
+    cur_abs = os.path.abspath(current_wallpaper) if current_wallpaper else None
+    idx = next((i for i, w in enumerate(_available_wallpapers)
+                if (w["path"] and cur_abs and os.path.abspath(w["path"]) == cur_abs)
+                or (w["path"] is None and cur_abs is None)), 0)
+    new_idx = (idx + direction) % len(_available_wallpapers)
+    set_wallpaper(_available_wallpapers[new_idx]["path"])
+    py16.tone(660, 10, py16.WAVE_SQUARE)
+
 # -- 3.b PAINT: Render + Update ----------------------------------------------
 def paint_draw(win, wx, wy, ww, wh, is_active):
     cx, cy = wx + 6, wy + 16
@@ -986,6 +1141,28 @@ def colors_draw(win, wx, wy, ww, wh, is_active):
     center_x = wx + 16 + (arrow_r_x - (wx + 16)) // 2
     py16.text(label, center_x - len(label) * 2, wy+136, sys_text_color)
 
+    # Hintergrundbild: < NAME > (zykelt durch wallpapers/ + Arbeitsverzeichnis).
+    py16.text(tr("BACKGROUND:"), wx+6, wy+150, sys_text_color)
+    wp_multi = len(_available_wallpapers) > 1
+    # aktuellen Anzeigenamen ermitteln
+    cur_abs = os.path.abspath(current_wallpaper) if current_wallpaper else None
+    wp_name = "NONE"
+    for w in _available_wallpapers:
+        if (w["path"] and cur_abs and os.path.abspath(w["path"]) == cur_abs) or (w["path"] is None and cur_abs is None):
+            wp_name = w["name"]; break
+    else:
+        if cur_abs:                                       # gesetzt, aber (noch) nicht in der Liste
+            wp_name = _ascii_safe(os.path.splitext(os.path.basename(current_wallpaper))[0]).upper()[:14]
+    # Linker Pfeil
+    py16.rectfill(wx+6, wy+160, 10, 10, 5 if wp_multi else 6); py16.rect(wx+6, wy+160, 10, 10, 0)
+    py16.text("<", wx+9, wy+162, 7 if wp_multi else sys_text_color)
+    # Rechter Pfeil
+    py16.rectfill(arrow_r_x, wy+160, 10, 10, 5 if wp_multi else 6); py16.rect(arrow_r_x, wy+160, 10, 10, 0)
+    py16.text(">", arrow_r_x+3, wy+162, 7 if wp_multi else sys_text_color)
+    # Name zentriert
+    wp_label = wp_name[:max(1, max_chars)]
+    py16.text(wp_label, center_x - len(wp_label) * 2, wy+162, sys_text_color)
+
 def _cycle_language(direction):
     """Wechselt zur Sprache direction (+1 / -1) in _available_languages."""
     if len(_available_languages) <= 1:
@@ -1013,6 +1190,10 @@ def colors_update(win, lx, ly, m_pressed, m_sec_pressed, m_held):
     if 134 <= ly <= 144:
         if 6 <= lx <= 16:       _cycle_language(-1)
         elif 100 <= lx <= 110:  _cycle_language(+1)
+    # Hintergrundbild-Pfeile
+    if 160 <= ly <= 170:
+        if 6 <= lx <= 16:       _cycle_wallpaper(-1)
+        elif 100 <= lx <= 110:  _cycle_wallpaper(+1)
 
 # -- 6. FILES ----------------------------------------------------------------
 # Dateibrowser mit Drag-&-Drop in andere App-Fenster.
@@ -1492,6 +1673,8 @@ def init():
     load_theme()
     discover_languages()
     load_language(current_language)
+    discover_wallpapers()
+    _bake_wallpaper()
     for w in windows:
         if w["id"] == "files": w["current_dir"] = os.path.abspath("."); load_files(w)
         if w["id"] == "terminal": w["cwd"] = os.path.abspath(".")
@@ -1666,8 +1849,8 @@ def update():
                 win = windows[i]
                 if win["visible"] and not win["minimized"] and win["x"] <= mx <= win["x"] + win["w"] and win["y"] <= my <= win["y"] + win["h"]:
                     drop_win = win; break
+            full_path = dragged_file
             if drop_win:
-                full_path = dragged_file
                 if drop_win["id"] == "notepad" and not os.path.isdir(full_path):
                     try:
                         with open(full_path, "r") as f: content = f.read().replace('\r', '')
@@ -1710,6 +1893,12 @@ def update():
                             save_theme()
                             py16.tone(880, 20, py16.WAVE_SQUARE)
                             break
+                elif full_path.lower().endswith(".p16canvas"):
+                    # Drop einer .p16canvas auf den freien Desktop -> Hintergrundbild
+                    _canvas_cache.pop(os.path.abspath(full_path), None)
+                    set_wallpaper(full_path)
+                    discover_wallpapers()
+                    py16.tone(880, 20, py16.WAVE_SQUARE) if _wallpaper_runs else py16.tone(200, 20, py16.WAVE_SAW)
             dragged_file = None
         return
 
@@ -1907,6 +2096,11 @@ def draw():
      10. CRT-Effekt-Overlay (falls in theme.json aktiviert)
     """
     py16.cls(desktop_color)
+
+    # --- HINTERGRUNDBILD (falls in THEME gewaehlt) ---
+    if _wallpaper_runs:
+        for rx, ry, rw, rc in _wallpaper_runs:
+            py16.rectfill(rx, ry, rw, 1, rc)
     
     # --- DESKTOP ICONS ---
     for i, icon in enumerate(desktop_icons):
@@ -1933,7 +2127,10 @@ def draw():
         elif icon.get("is_file"):
             py16.rectfill(ix+4, iy, 12, 14, 7); py16.rect(ix+4, iy, 12, 14, 0); py16.line(ix+6, iy+3, ix+13, iy+3, 1); py16.line(ix+6, iy+6, ix+13, iy+6, 5); py16.line(ix+6, iy+9, ix+11, iy+9, 5)
         elif app_id == "files":
-            py16.rectfill(ix+2, iy+4, 16, 10, 10); py16.rectfill(ix+2, iy+2, 6, 2, 10); py16.rect(ix+2, iy+2, 16, 12, 0); py16.line(ix+2, iy+4, ix+8, iy+4, 0)
+            # Voll ausgefuellter Ordner: Koerper fuellt das ganze Icon-Rechteck,
+            # Reiter (tab) oben links + Falzlinie als Detail.
+            py16.rectfill(ix+2, iy+2, 16, 12, 10); py16.rect(ix+2, iy+2, 16, 12, 0)
+            py16.rectfill(ix+3, iy+3, 6, 2, 6); py16.line(ix+2, iy+5, ix+17, iy+5, 0)
         elif app_id == "notepad":
             py16.rectfill(ix+4, iy, 12, 14, 7); py16.rect(ix+4, iy, 12, 14, 0); py16.line(ix+6, iy+3, ix+13, iy+3, 1); py16.line(ix+6, iy+6, ix+13, iy+6, 5); py16.line(ix+6, iy+9, ix+11, iy+9, 5)
         elif app_id == "terminal":
@@ -1985,10 +2182,17 @@ def draw():
         menu_h = (len(windows) * 12) + 4
         menu_y = py16.HEIGHT - 12 - menu_h
         draw_win_border(0, menu_y, 80, menu_h)
+        # Eintrag unter dem Cursor ermitteln (gleiche Geometrie wie Klick-Handler)
+        hover_idx = -1
+        if 0 <= cursor_x <= 80 and menu_y <= cursor_y <= py16.HEIGHT - 12:
+            hover_idx = int((cursor_y - menu_y - 2) // 12)
         for i, win in enumerate(windows):
             item_y = menu_y + 2 + (i * 12)
-            if win["visible"]: py16.pset(6, item_y + 3, sys_text_color); py16.pset(7, item_y + 3, sys_text_color)
-            py16.text(win["title"], 12, item_y + 4, sys_text_color)
+            if i == hover_idx:
+                py16.rectfill(2, item_y, 76, 11, 1)
+            label_col = 7 if i == hover_idx else sys_text_color
+            if win["visible"]: py16.pset(6, item_y + 3, label_col); py16.pset(7, item_y + 3, label_col)
+            py16.text(win["title"], 12, item_y + 4, label_col)
 
     if date_popup_open:
         days = ["MO", "DI", "MI", "DO", "FR", "SA", "SO"]
@@ -2006,8 +2210,15 @@ def draw():
         py16.blend_mode("alpha", alpha=100); py16.rectfill(mx_m+2, my_m+2, 56, menu_h, 0); py16.blend_mode("normal")
         py16.rectfill(mx_m, my_m, 56, menu_h, 6); py16.rect(mx_m, my_m, 56, menu_h, 0)
 
+        # Option unter dem Cursor ermitteln (gleiche Geometrie wie Klick-Handler)
+        hover_idx = -1
+        if mx_m <= cursor_x <= mx_m + 56 and my_m <= cursor_y <= my_m + menu_h:
+            hover_idx = int((cursor_y - my_m - 2) // 12)
         for i, opt in enumerate(context_menu_options):
-            py16.text(context_label(opt), mx_m+4, my_m + 4 + i*12, sys_text_color)
+            if i == hover_idx:
+                py16.rectfill(mx_m+1, my_m + 2 + i*12, 54, 12, 1)
+            label_col = 7 if i == hover_idx else sys_text_color
+            py16.text(context_label(opt), mx_m+4, my_m + 4 + i*12, label_col)
             if i < len(context_menu_options) - 1:
                 py16.line(mx_m, my_m + 13 + i*12, mx_m+56, my_m + 13 + i*12, 0)
 
