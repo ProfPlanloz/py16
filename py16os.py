@@ -46,7 +46,7 @@
 #
 # @credits
 # Vibe-coder: Prof.Plonloz 
-# Code: Gemini 3.1 pro & Claud opus 4.7
+# Code: Gemini & Claud
 # @end
 import py16
 import time
