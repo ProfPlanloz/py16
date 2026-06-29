@@ -2,6 +2,10 @@
 
 A 16-bit-era fantasy console written in Python with Pygame.
 
+![Gameplay Screenshot](docs/bf4.gif)
+
+![Gameplay Screenshot](docs/bf5.gif)
+
 ## Specs
 
 | | py-16 |
@@ -388,6 +392,8 @@ people can play on the same TV with their own gamepads.
 
 ### Scanlines (HDMA-style distortion)
 
+![Gameplay Screenshot](docs/bf1.png)
+
 Post-process the finished frame by shifting each row horizontally, just
 like SNES HDMA used to. Classic use cases: water waves, heat shimmer,
 boss-aura lens distortion, CRT-style interlacing, Hadouken shockwaves.
@@ -436,6 +442,8 @@ Without numpy, ~120 FPS. Works on Pi 4 without slowdown.
 A live demo is in `examples/scanlines_demo.py`.
 
 ### Particles (fire, smoke, sparks, explosions, confetti)
+
+![Gameplay Screenshot](docs/bf2.gif)
 
 Built-in particle system with physics (velocity, acceleration, drag),
 lifetime, color, size, and blending. 2000 simultaneous particles fit
@@ -650,6 +658,8 @@ don't need a separate code path. `py16.btn('left')` returns True
 whether the keyboard arrow is pressed or the gamepad D-Pad is held.
 
 #### Multi-player (couch co-op)
+
+![Gameplay Screenshot](docs/bf3.png)
 
 py-16 supports up to 4 players, each with their own gamepad. The first
 connected controller becomes Player 1, the second becomes Player 2, etc.
